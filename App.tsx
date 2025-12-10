@@ -47,7 +47,7 @@ const App: React.FC = () => {
 
   // Tools State
   const [activeTool, setActiveTool] = useState<ToolType>('select');
-  const [selectedColor, setSelectedColor] = useState<string>('#64748b');
+  const [selectedColor, setSelectedColor] = useState<string>('#1e3a8a'); // Default Navy
 
   // Configuration Dialog State
   const [configDialog, setConfigDialog] = useState<{
@@ -91,6 +91,7 @@ const App: React.FC = () => {
     const type = event.dataTransfer.getData('application/reactflow') as ComponentType;
     const customLabel = event.dataTransfer.getData('application/reactflow-label');
     const subTypeId = event.dataTransfer.getData('application/reactflow-subtype');
+    const dropColor = event.dataTransfer.getData('application/reactflow-color'); // Get color from Sidebar drag
     
     if (!type) return;
 
@@ -120,7 +121,7 @@ const App: React.FC = () => {
       label: label,
       customLabel: customLabel || undefined,
       subType: subTypeId || undefined,
-      color: selectedColor
+      color: dropColor || selectedColor // Use dropped color or fallback
     };
 
     const hasSubTypes = spec?.subTypes && spec.subTypes.length > 0;

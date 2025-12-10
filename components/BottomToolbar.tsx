@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MousePointer2, ArrowRight, Minus, Type, Square, Circle, 
-  Palette, Check, ZoomIn, ZoomOut, RotateCw, PenTool, Undo2
+  ZoomIn, ZoomOut, RotateCw, PenTool, Undo2
 } from 'lucide-react';
 
 export type ToolType = 'select' | 'connect_arrow' | 'connect_line' | 'connect_loop' | 'text' | 'rect' | 'circle' | 'pen';
@@ -18,21 +18,12 @@ interface BottomToolbarProps {
   canUndo?: boolean;
 }
 
-const COLORS = [
-  { label: 'Slate', value: '#64748b' }, // Default
-  { label: 'Red', value: '#ef4444' },
-  { label: 'Orange', value: '#f97316' },
-  { label: 'Yellow', value: '#eab308' },
-  { label: 'Green', value: '#22c55e' },
-  { label: 'Blue', value: '#3b82f6' },
-  { label: 'Purple', value: '#a855f7' },
-  { label: 'White', value: '#f8fafc' },
-];
+const DEFAULT_NAVY = '#1e3a8a';
+const DEFAULT_YELLOW = '#eab308'; // for loop
 
 const BottomToolbar: React.FC<BottomToolbarProps> = ({ 
   activeTool, 
   setActiveTool, 
-  selectedColor, 
   setSelectedColor,
   zoom,
   onZoomChange,
@@ -40,31 +31,80 @@ const BottomToolbar: React.FC<BottomToolbarProps> = ({
   onUndo,
   canUndo = false
 }) => {
-  const [showColorPicker, setShowColorPicker] = useState(false);
+  // Local state for tool colors
+  const [toolColors, setToolColors] = useState<Record<string, string>>({
+    connect_arrow: DEFAULT_NAVY,
+    connect_line: DEFAULT_NAVY,
+    connect_loop: DEFAULT_YELLOW, // Loop default yellow
+    text: DEFAULT_NAVY,
+    rect: DEFAULT_NAVY,
+    circle: DEFAULT_NAVY,
+    pen: DEFAULT_NAVY
+  });
 
-  // Reduced padding (p-2) and icon size (size={16}) by ~20%
-  const ToolButton = ({ tool, icon, label }: { tool: ToolType, icon: React.ReactNode, label: string }) => (
-    <button
-      onClick={() => setActiveTool(tool)}
-      className={`p-2 rounded-lg transition-all flex items-center justify-center relative group ${
-        activeTool === tool 
-          ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
-          : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-      }`}
-      title={label}
-    >
-      {icon}
-      <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-        {label}
-      </span>
-    </button>
-  );
+  // When active tool changes, propagate its color to the App's selectedColor
+  useEffect(() => {
+    if (activeTool !== 'select' && toolColors[activeTool]) {
+      setSelectedColor(toolColors[activeTool]);
+    }
+  }, [activeTool, toolColors, setSelectedColor]);
+
+  const handleToolColorChange = (tool: string, color: string) => {
+    setToolColors(prev => ({ ...prev, [tool]: color }));
+    // If we are changing the color of the *current* tool, update global selection immediately
+    if (activeTool === tool) {
+      setSelectedColor(color);
+    }
+  };
+
+  const ToolButton = ({ tool, icon, label }: { tool: ToolType, icon: React.ReactNode, label: string }) => {
+    const isActive = activeTool === tool;
+    // Don't show picker for select tool
+    const hasPicker = tool !== 'select';
+    
+    return (
+      <div className="relative group flex items-center">
+         <button
+          onClick={() => setActiveTool(tool)}
+          className={`p-2 rounded-lg transition-all flex items-center justify-center relative ${
+            isActive 
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+          title={label}
+        >
+          {icon}
+          <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+            {label}
+          </span>
+        </button>
+        
+        {/* Tiny Color Picker beside the tool */}
+        {hasPicker && (
+           <div className="absolute -right-1 bottom-1 w-2.5 h-2.5 z-10 hover:scale-125 transition-transform">
+             <label 
+                htmlFor={`tool-color-${tool}`}
+                className="block w-full h-full rounded-full cursor-pointer border border-slate-900 shadow-sm"
+                style={{ backgroundColor: toolColors[tool] }}
+              />
+              <input
+                id={`tool-color-${tool}`}
+                type="color"
+                value={toolColors[tool]}
+                onChange={(e) => handleToolColorChange(tool, e.target.value)}
+                className="absolute opacity-0 w-0 h-0 pointer-events-none"
+              />
+           </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2">
       
       {/* Main Toolbar */}
-      <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 rounded-xl shadow-2xl flex items-center gap-1">
+      <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 rounded-xl shadow-2xl flex items-center gap-2 px-3">
         
         <ToolButton tool="select" icon={<MousePointer2 size={16} />} label="Select / Move" />
         
@@ -81,50 +121,6 @@ const BottomToolbar: React.FC<BottomToolbarProps> = ({
         <ToolButton tool="rect" icon={<Square size={16} />} label="Rectangle" />
         <ToolButton tool="circle" icon={<Circle size={16} />} label="Circle" />
         
-        <div className="w-px h-6 bg-slate-700 mx-1" />
-
-        {/* Color Picker Button */}
-        <div className="relative">
-          <button
-            onClick={() => setShowColorPicker(!showColorPicker)}
-            className={`p-2 rounded-lg transition-all flex items-center justify-center relative ${
-              showColorPicker 
-                ? 'bg-slate-700 text-white' 
-                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-            }`}
-          >
-            <div className="relative">
-              <Palette size={16} />
-              <div 
-                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900"
-                style={{ backgroundColor: selectedColor }}
-              />
-            </div>
-          </button>
-          
-          {/* Popover */}
-          {showColorPicker && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl grid grid-cols-4 gap-2 w-48 animate-in slide-in-from-bottom-2 fade-in">
-              {COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => {
-                    setSelectedColor(c.value);
-                    setShowColorPicker(false);
-                  }}
-                  className="w-8 h-8 rounded-full border border-slate-700 hover:scale-110 transition-transform flex items-center justify-center relative"
-                  style={{ backgroundColor: c.value }}
-                  title={c.label}
-                >
-                  {selectedColor === c.value && (
-                    <Check size={14} className={c.value === '#f8fafc' ? 'text-black' : 'text-white'} />
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
         <div className="w-px h-6 bg-slate-700 mx-1" />
 
         {/* Undo Button */}
