@@ -6,6 +6,8 @@ import BottomToolbar, { ToolType } from './components/BottomToolbar';
 import EvaluationModal from './components/EvaluationModal';
 import HintModal from './components/HintModal';
 import ComponentConfigDialog from './components/ComponentConfigDialog';
+import RequirementsPanel from './components/RequirementsPanel';
+import AITutor from './components/AITutor';
 import { generateChallenge, evaluateDesign, generateHints } from './services/gemini';
 import { SystemComponent, Connection, ComponentType, Challenge, EvaluationResult, HintResult } from './types';
 import { COMPONENT_SPECS } from './constants';
@@ -263,18 +265,12 @@ const App: React.FC = () => {
           canUndo={history.length > 0}
         />
         
-        {challenge && (
-          <div className="absolute top-4 right-4 w-64 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg p-4 shadow-xl z-10 max-h-[50vh] overflow-y-auto">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Requirements</h3>
-            <ul className="list-disc list-inside text-xs text-slate-300 space-y-1 mb-3">
-              {challenge.requirements.map((r, i) => <li key={i}>{r}</li>)}
-            </ul>
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Constraints</h3>
-            <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
-              {challenge.constraints.map((c, i) => <li key={i}>{c}</li>)}
-            </ul>
-          </div>
-        )}
+        {/* Requirements Panel */}
+        {challenge && <RequirementsPanel challenge={challenge} />}
+        
+        {/* AI Tutor */}
+        <AITutor challenge={challenge} hints={hintResult} />
+
       </div>
 
       <EvaluationModal 

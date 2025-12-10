@@ -1,0 +1,278 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Challenge, HintResult } from '../types';
+import { createTutorChat } from '../services/gemini';
+import { Chat, GenerateContentResponse } from '@google/genai';
+import { MessageCircle, X, Send, Settings, Key, Bot, User, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+
+interface AITutorProps {
+  challenge: Challenge | null;
+  hints: HintResult | null;
+}
+
+interface Message {
+  role: 'user' | 'model';
+  text: string;
+}
+
+const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [tempKey, setTempKey] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [chatSession, setChatSession] = useState<Chat | null>(null);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load API Key from local storage on mount
+  useEffect(() => {
+    const storedKey = localStorage.getItem('gemini_user_api_key');
+    if (storedKey) {
+      try {
+        setApiKey(atob(storedKey)); // Simple decode
+      } catch (e) {
+        console.error("Invalid key stored");
+      }
+    } else {
+      setShowSettings(true);
+    }
+  }, []);
+
+  // Initialize Chat Session when Key or Challenge/Hints change
+  useEffect(() => {
+    if (apiKey && challenge) {
+      const systemPrompt = `
+        You are an expert System Design Tutor. Your goal is to help the user learn by guiding them through the current challenge.
+        
+        CURRENT CHALLENGE:
+        Title: ${challenge.title}
+        Description: ${challenge.description}
+        Requirements: ${challenge.requirements.join('; ')}
+        Constraints: ${challenge.constraints.join('; ')}
+        
+        ${hints ? `GENERATED HINTS CONTEXT:
+        Strategy: ${hints.architectureStrategy}
+        Recommended Components: ${hints.suggestedComponents.map(c => c.component).join(', ')}
+        ` : ''}
+        
+        GUIDELINES:
+        1. Be helpful, encouraging, and Socratic. Don't just give the answer; ask leading questions.
+        2. Keep answers concise (max 3-4 sentences) unless asked for details.
+        3. If the user asks about specific technologies, explain trade-offs (e.g., SQL vs NoSQL).
+        4. Focus on the requirements of the current challenge.
+      `;
+
+      try {
+        const session = createTutorChat(apiKey, systemPrompt);
+        setChatSession(session);
+        setMessages([{ role: 'model', text: `Hi! I'm your System Design Tutor. I can help you with the "${challenge.title}" challenge. Where would you like to start?` }]);
+      } catch (error) {
+        console.error("Failed to init chat", error);
+      }
+    }
+  }, [apiKey, challenge, hints]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isOpen]);
+
+  const handleSaveKey = () => {
+    if (tempKey.trim()) {
+      setApiKey(tempKey.trim());
+      localStorage.setItem('gemini_user_api_key', btoa(tempKey.trim())); // Simple encode
+      setTempKey('');
+      setShowSettings(false);
+    }
+  };
+
+  const handleClearKey = () => {
+    setApiKey('');
+    localStorage.removeItem('gemini_user_api_key');
+    setChatSession(null);
+    setMessages([]);
+    setShowSettings(true);
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || !chatSession) return;
+
+    const userMsg = inputValue.trim();
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setInputValue('');
+    setIsLoading(true);
+
+    try {
+      const result: GenerateContentResponse = await chatSession.sendMessage(userMsg);
+      const text = result.text;
+      if (text) {
+        setMessages(prev => [...prev, { role: 'model', text }]);
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, { role: 'model', text: "I'm having trouble connecting. Please check your API Key." }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        className="absolute bottom-6 right-6 z-50 p-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-500/30 transition-all hover:scale-110 group"
+        title="Open AI Tutor"
+      >
+        <Bot size={28} />
+        <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-slate-700">
+          Need help?
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end animate-in slide-in-from-bottom-5 fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-80 sm:w-96 flex flex-col overflow-hidden h-[500px] max-h-[80vh]">
+        
+        {/* Header */}
+        <div className="p-3 bg-indigo-900/30 border-b border-indigo-500/20 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-600 rounded-lg">
+              <Bot size={18} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">AI Tutor</h3>
+              <p className="text-[10px] text-indigo-300">Powered by Gemini 2.5</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-1.5 rounded-md transition-colors ${showSettings ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+              title="Settings"
+            >
+              <Settings size={16} />
+            </button>
+            <button 
+              onClick={() => setIsOpen(false)}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+            >
+              <ChevronDown size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        {showSettings || !apiKey ? (
+          <div className="flex-1 p-6 flex flex-col justify-center items-center bg-slate-900">
+            <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mb-4">
+              <Key size={24} className="text-indigo-400" />
+            </div>
+            <h4 className="text-white font-bold mb-2">Setup Tutor API Key</h4>
+            <p className="text-xs text-slate-400 text-center mb-6 leading-relaxed">
+              To use the AI Tutor, please provide your own Google Gemini API Key. It will be stored locally in your browser.
+            </p>
+            
+            <div className="w-full space-y-3">
+              <input
+                type="password"
+                placeholder="Paste API Key here..."
+                value={tempKey}
+                onChange={(e) => setTempKey(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                onClick={handleSaveKey}
+                disabled={!tempKey.trim()}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Save & Start Chatting
+              </button>
+              
+              {apiKey && (
+                 <button
+                  onClick={handleClearKey}
+                  className="w-full py-2 text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Clear Saved Key
+                </button>
+              )}
+              
+              <div className="text-[10px] text-slate-600 text-center mt-4">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline hover:text-indigo-400">Get an API Key</a>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Chat History */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/50 custom-scrollbar">
+              {messages.length === 0 && (
+                 <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 opacity-50">
+                    <MessageCircle size={32} />
+                    <span className="text-xs">Start a conversation...</span>
+                 </div>
+              )}
+              
+              {messages.map((msg, idx) => (
+                <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-slate-700' : 'bg-indigo-600'}`}>
+                    {msg.role === 'user' ? <User size={14} className="text-slate-300" /> : <Bot size={14} className="text-white" />}
+                  </div>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
+                    msg.role === 'user' 
+                      ? 'bg-slate-800 text-slate-200 rounded-tr-none' 
+                      : 'bg-indigo-900/40 text-indigo-100 border border-indigo-500/20 rounded-tl-none'
+                  }`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              
+              {isLoading && (
+                <div className="flex gap-3">
+                   <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
+                      <Bot size={14} className="text-white" />
+                   </div>
+                   <div className="bg-indigo-900/40 border border-indigo-500/20 rounded-2xl rounded-tl-none px-4 py-3">
+                      <Loader2 size={16} className="text-indigo-400 animate-spin" />
+                   </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Area */}
+            <div className="p-3 bg-slate-900 border-t border-slate-800">
+               <div className="flex gap-2">
+                 <input
+                   type="text"
+                   value={inputValue}
+                   onChange={(e) => setInputValue(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                   placeholder={challenge ? "Ask about the design..." : "Generate a challenge first..."}
+                   disabled={!challenge || isLoading}
+                   className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                 />
+                 <button
+                   onClick={handleSendMessage}
+                   disabled={!inputValue.trim() || !challenge || isLoading}
+                   className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg transition-colors"
+                 >
+                   <Send size={18} />
+                 </button>
+               </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AITutor;

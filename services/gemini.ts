@@ -1,7 +1,7 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
 import { Challenge, EvaluationResult, SystemComponent, Connection, HintResult } from "../types";
 
-// Initialize Gemini Client
+// Initialize Gemini Client for default app actions (using env key)
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const challengeSchema: Schema = {
@@ -190,4 +190,13 @@ export const evaluateDesign = async (
     console.error("Gemini Evaluation Error:", error);
     throw error;
   }
+};
+
+// Create a chat session for the AI Tutor using a custom API key
+export const createTutorChat = (apiKey: string, systemInstruction: string): Chat => {
+  const client = new GoogleGenAI({ apiKey });
+  return client.chats.create({
+    model: 'gemini-2.5-flash',
+    config: { systemInstruction }
+  });
 };
