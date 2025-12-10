@@ -64,6 +64,7 @@ export enum ComponentType {
   ANNOTATION_TEXT = 'Text',
   ANNOTATION_RECT = 'Rectangle',
   ANNOTATION_CIRCLE = 'Circle',
+  ANNOTATION_DRAW = 'Freehand',
   
   // Fallback
   CUSTOM = 'Custom'
@@ -90,6 +91,8 @@ export interface SystemComponent {
   type: ComponentType;
   x: number;
   y: number;
+  width?: number;
+  height?: number;
   
   // Configuration
   subType?: string; // ID of the sub type
@@ -97,6 +100,9 @@ export interface SystemComponent {
   label?: string;   // Display label
   customLabel?: string; // User override
   color?: string; // Hex color for styling
+  
+  // For Freehand
+  points?: {x: number, y: number}[];
 }
 
 export interface Connection {
@@ -104,7 +110,7 @@ export interface Connection {
   sourceId: string;
   targetId: string;
   label?: string;
-  type?: 'directed' | 'undirected'; // Arrow vs Line
+  type?: 'directed' | 'undirected' | 'loop'; // Arrow vs Line vs Loop
   color?: string;
 }
 

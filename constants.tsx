@@ -5,7 +5,7 @@ import {
   Clock, PlayCircle, StopCircle, Repeat, Layout, 
   Cpu, GitBranch, ArrowRightLeft, Square,
   Wifi, Scale, Settings, FileCheck, Share2, Archive, Lock, Zap,
-  Type, Circle, SquareDashed
+  Type, Circle, SquareDashed, PenTool
 } from 'lucide-react';
 import { ComponentType, ComponentDefinition } from './types';
 
@@ -342,4 +342,5 @@ export const COMPONENT_SPECS: Record<string, ComponentDefinition> = {
   [ComponentType.ANNOTATION_TEXT]: { type: ComponentType.ANNOTATION_TEXT, label: 'Text', icon: <Type size={20} />, description: 'Text Annotation', subTypes: [] },
   [ComponentType.ANNOTATION_RECT]: { type: ComponentType.ANNOTATION_RECT, label: 'Rectangle', icon: <SquareDashed size={20} />, description: 'Grouping Box', subTypes: [] },
   [ComponentType.ANNOTATION_CIRCLE]: { type: ComponentType.ANNOTATION_CIRCLE, label: 'Circle', icon: <Circle size={20} />, description: 'Circular Zone', subTypes: [] },
+  [ComponentType.ANNOTATION_DRAW]: { type: ComponentType.ANNOTATION_DRAW, label: 'Pen', icon: <PenTool size={20} />, description: 'Freehand Drawing', subTypes: [] },
 };

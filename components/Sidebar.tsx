@@ -64,7 +64,8 @@ const Sidebar: React.FC = () => {
       spec.type !== ComponentType.CUSTOM &&
       spec.type !== ComponentType.ANNOTATION_TEXT &&
       spec.type !== ComponentType.ANNOTATION_RECT &&
-      spec.type !== ComponentType.ANNOTATION_CIRCLE
+      spec.type !== ComponentType.ANNOTATION_CIRCLE &&
+      spec.type !== ComponentType.ANNOTATION_DRAW
     );
   }, []);
 

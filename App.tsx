@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
 import TopBar from './components/TopBar';
@@ -16,6 +16,11 @@ export interface ViewState {
   zoom: number;
 }
 
+interface HistoryState {
+  components: SystemComponent[];
+  connections: Connection[];
+}
+
 const App: React.FC = () => {
   // State
   const [components, setComponents] = useState<SystemComponent[]>([]);
@@ -24,6 +29,9 @@ const App: React.FC = () => {
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [hintResult, setHintResult] = useState<HintResult | null>(null);
   
+  // History for Undo
+  const [history, setHistory] = useState<HistoryState[]>([]);
+
   // View State (Pan & Zoom)
   const [viewState, setViewState] = useState<ViewState>({ x: 0, y: 0, zoom: 1 });
 
@@ -50,6 +58,29 @@ const App: React.FC = () => {
     componentType: null,
     draftComponent: null
   });
+
+  // Undo / History Logic
+  const handleSnapshot = useCallback(() => {
+    setHistory(prev => {
+      const newState = { components, connections };
+      // Keep last 30 states
+      const newHistory = [...prev, newState].slice(-30);
+      return newHistory;
+    });
+  }, [components, connections]);
+
+  const handleUndo = useCallback(() => {
+    setHistory(prev => {
+      if (prev.length === 0) return prev;
+      const lastState = prev[prev.length - 1];
+      const newHistory = prev.slice(0, -1);
+      
+      setComponents(lastState.components);
+      setConnections(lastState.connections);
+      
+      return newHistory;
+    });
+  }, []);
 
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
@@ -101,6 +132,8 @@ const App: React.FC = () => {
         initialSubTypeId: subTypeId
       });
     } else {
+      // Save state before adding
+      handleSnapshot();
       setComponents((prev) => [...prev, draft as SystemComponent]);
     }
   };
@@ -115,6 +148,8 @@ const App: React.FC = () => {
       label: tool || configDialog.draftComponent.label
     };
 
+    // Save state before adding
+    handleSnapshot();
     setComponents(prev => [...prev, newComponent]);
     setConfigDialog({ isOpen: false, componentType: null, draftComponent: null });
   };
@@ -171,7 +206,8 @@ const App: React.FC = () => {
   };
 
   const handleClearBoard = () => {
-    if (confirm("Are you sure you want to clear the design board?")) {
+    if (window.confirm("Are you sure you want to clear the design board?")) {
+      handleSnapshot(); // Save before clearing so user can undo
       setComponents([]);
       setConnections([]);
       setEvaluation(null);
@@ -212,6 +248,7 @@ const App: React.FC = () => {
           selectedColor={selectedColor}
           viewState={viewState}
           setViewState={setViewState}
+          onSnapshot={handleSnapshot}
         />
 
         <BottomToolbar 
@@ -222,6 +259,8 @@ const App: React.FC = () => {
           zoom={viewState.zoom}
           onZoomChange={(z) => setViewState(prev => ({ ...prev, zoom: z }))}
           onZoomReset={() => setViewState({ x: 0, y: 0, zoom: 1 })}
+          onUndo={handleUndo}
+          canUndo={history.length > 0}
         />
         
         {challenge && (
