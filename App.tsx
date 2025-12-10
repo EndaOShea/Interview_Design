@@ -209,13 +209,14 @@ const App: React.FC = () => {
   };
 
   const handleClearBoard = () => {
-    if (window.confirm("Are you sure you want to clear the design board?")) {
-      handleSnapshot(); // Save before clearing so user can undo
-      setComponents([]);
-      setConnections([]);
-      setEvaluation(null);
-      setViewState({ x: 0, y: 0, zoom: 1 }); // Reset view
-    }
+    // Only clear if there is something to clear
+    if (components.length === 0 && connections.length === 0) return;
+
+    handleSnapshot(); // Save before clearing so user can undo
+    setComponents([]);
+    setConnections([]);
+    setEvaluation(null);
+    setViewState({ x: 0, y: 0, zoom: 1 }); // Reset view
   };
 
   const applyColorToSelection = (color: string) => {
