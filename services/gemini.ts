@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { Challenge, EvaluationResult, SystemComponent, Connection } from "../types";
+import { Challenge, EvaluationResult, SystemComponent, Connection, HintResult } from "../types";
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -35,6 +35,26 @@ const evaluationSchema: Schema = {
   required: ['score', 'summary', 'pros', 'cons', 'recommendations', 'securityConcerns']
 };
 
+const hintSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    suggestedComponents: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          layer: { type: Type.STRING, description: "The general layer name (e.g. Data Storage)" },
+          component: { type: Type.STRING, description: "Specific component (e.g. Relational DB)" },
+          reason: { type: Type.STRING, description: "Why this component is needed for this challenge" }
+        }
+      }
+    },
+    architectureStrategy: { type: Type.STRING, description: "A high-level paragraph on how to approach the design." },
+    keyConsiderations: { type: Type.ARRAY, items: { type: Type.STRING } }
+  },
+  required: ['suggestedComponents', 'architectureStrategy', 'keyConsiderations']
+};
+
 export const generateChallenge = async (topic?: string): Promise<Challenge> => {
   try {
     const prompt = topic 
@@ -65,6 +85,43 @@ export const generateChallenge = async (topic?: string): Promise<Challenge> => {
       constraints: ["100M new URLs per month", "100:1 read/write ratio"],
       difficulty: "Junior"
     };
+  }
+};
+
+export const generateHints = async (challenge: Challenge): Promise<HintResult> => {
+  try {
+    const prompt = `
+      I am a candidate trying to solve this System Design challenge:
+      TITLE: ${challenge.title}
+      DESCRIPTION: ${challenge.description}
+      REQUIREMENTS: ${challenge.requirements.join(', ')}
+      
+      I am stuck and need a "Starter Kit" or hints to get going.
+      
+      1. List the essential components I should probably drag onto the canvas to satisfy the requirements (e.g., Load Balancer, Cache, Database type, etc.).
+      2. Provide a 2-3 sentence high-level strategy on how to connect them (e.g., "Start with the client, put a load balancer in front of stateless services...").
+      3. List 2-3 key technical "gotchas" or considerations for this specific problem.
+
+      Return the response in JSON format.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: hintSchema,
+        systemInstruction: "You are a helpful mentor guiding a student. Do not give the full answer code, just architectural building blocks and high-level strategy."
+      }
+    });
+
+    if (response.text) {
+      return JSON.parse(response.text) as HintResult;
+    }
+    throw new Error("No response text from Gemini");
+  } catch (error) {
+    console.error("Gemini Hint Error:", error);
+    throw error;
   }
 };
 

@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { SystemComponent, Connection, ComponentType } from '../types';
 import { getIconForType, COMPONENT_SPECS } from '../constants';
-import { X, Edit2 } from 'lucide-react';
+import { ToolType } from './BottomToolbar';
+import { X } from 'lucide-react';
 
 interface CanvasProps {
   components: SystemComponent[];
@@ -10,6 +11,9 @@ interface CanvasProps {
   setConnections: React.Dispatch<React.SetStateAction<Connection[]>>;
   onDrop: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
+  activeTool: ToolType;
+  setActiveTool: (tool: ToolType) => void;
+  selectedColor: string;
 }
 
 const COMPONENT_WIDTH = 140;
@@ -22,6 +26,9 @@ const Canvas: React.FC<CanvasProps> = ({
   setConnections,
   onDrop,
   onDragOver,
+  activeTool,
+  setActiveTool,
+  selectedColor
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null);
@@ -30,20 +37,32 @@ const Canvas: React.FC<CanvasProps> = ({
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggedComponent, setDraggedComponent] = useState<{id: string, startX: number, startY: number} | null>(null);
 
+  // Apply selected color to currently selected item if it changes
+  useEffect(() => {
+    if (selectedId) {
+      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, color: selectedColor } : c));
+    }
+  }, [selectedColor, selectedId]);
+
   const handleComponentClick = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     
     // Connection Logic
-    if (e.shiftKey) {
+    const isConnecting = activeTool === 'connect_arrow' || activeTool === 'connect_line' || e.shiftKey;
+    
+    if (isConnecting) {
       if (!connectingSourceId) {
         setConnectingSourceId(id);
       } else {
         if (connectingSourceId !== id) {
+          const type = activeTool === 'connect_line' ? 'undirected' : 'directed';
           const newConnection: Connection = {
             id: `c-${Date.now()}`,
             sourceId: connectingSourceId,
             targetId: id,
-            label: '' 
+            label: '',
+            type,
+            color: selectedColor
           };
           const exists = connections.some(
             c => c.sourceId === newConnection.sourceId && c.targetId === newConnection.targetId
@@ -53,6 +72,7 @@ const Canvas: React.FC<CanvasProps> = ({
           }
         }
         setConnectingSourceId(null);
+        // Reset tool to select after connection? Optional. Keeping it active allows chaining.
       }
       return;
     }
@@ -61,7 +81,51 @@ const Canvas: React.FC<CanvasProps> = ({
     setConnectingSourceId(null);
   };
 
-  const handleCanvasClick = () => {
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (activeTool === 'text') {
+      const newComp: SystemComponent = {
+        id: `text-${Date.now()}`,
+        type: ComponentType.ANNOTATION_TEXT,
+        x: x - 50, y: y - 15,
+        label: 'Text',
+        color: selectedColor
+      };
+      setComponents(prev => [...prev, newComp]);
+      setActiveTool('select');
+      return;
+    }
+
+    if (activeTool === 'rect') {
+      const newComp: SystemComponent = {
+        id: `rect-${Date.now()}`,
+        type: ComponentType.ANNOTATION_RECT,
+        x: x - 100, y: y - 75,
+        label: '',
+        color: selectedColor
+      };
+      setComponents(prev => [...prev, newComp]);
+      setActiveTool('select');
+      return;
+    }
+
+    if (activeTool === 'circle') {
+       const newComp: SystemComponent = {
+        id: `circ-${Date.now()}`,
+        type: ComponentType.ANNOTATION_CIRCLE,
+        x: x - 75, y: y - 75,
+        label: '',
+        color: selectedColor
+      };
+      setComponents(prev => [...prev, newComp]);
+      setActiveTool('select');
+      return;
+    }
+
     setSelectedId(null);
     setConnectingSourceId(null);
     setEditingConnectionId(null);
@@ -80,6 +144,7 @@ const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent, id: string) => {
+    if (activeTool !== 'select') return;
     if (e.shiftKey) return;
     e.stopPropagation();
     setDraggedComponent({ id, startX: e.clientX, startY: e.clientY });
@@ -110,33 +175,42 @@ const Canvas: React.FC<CanvasProps> = ({
      setEditingConnectionId(null);
   };
 
-  const getDimensions = (type: ComponentType) => {
-    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) {
-      return { w: 60, h: 60 };
-    }
-    if (type === ComponentType.FLOW_DECISION) {
-      return { w: 100, h: 100 }; // Diamond shape needs square box
-    }
-    if (type === ComponentType.STRUCTURE_LAYER) {
-      return { w: 400, h: 250 };
-    }
+  const handleLabelChange = (id: string, newLabel: string) => {
+    setComponents(prev => prev.map(c => c.id === id ? { ...c, customLabel: newLabel } : c));
+  };
+
+  const getDimensions = (comp: SystemComponent) => {
+    const { type } = comp;
+    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) return { w: 60, h: 60 };
+    if (type === ComponentType.FLOW_DECISION) return { w: 100, h: 100 };
+    if (type === ComponentType.STRUCTURE_LAYER) return { w: 400, h: 250 };
+    if (type === ComponentType.ANNOTATION_RECT) return { w: 200, h: 150 };
+    if (type === ComponentType.ANNOTATION_CIRCLE) return { w: 150, h: 150 };
+    if (type === ComponentType.ANNOTATION_TEXT) return { w: 120, h: 40 }; // Min width, auto expands in CSS usually
     return { w: COMPONENT_WIDTH, h: COMPONENT_HEIGHT };
   };
 
   const getCenter = (id: string) => {
     const comp = components.find(c => c.id === id);
     if (!comp) return { x: 0, y: 0 };
-    const dims = getDimensions(comp.type);
+    const dims = getDimensions(comp);
     return {
       x: comp.x + dims.w / 2,
       y: comp.y + dims.h / 2
     };
   };
 
+  const getCursorClass = () => {
+    if (activeTool === 'select') return 'cursor-default';
+    if (activeTool === 'text') return 'cursor-text';
+    if (activeTool === 'connect_arrow' || activeTool === 'connect_line') return 'cursor-crosshair';
+    return 'cursor-crosshair';
+  };
+
   return (
     <div 
       ref={canvasRef}
-      className="flex-1 relative bg-slate-950 overflow-hidden cursor-crosshair"
+      className={`flex-1 relative bg-slate-950 overflow-hidden ${getCursorClass()}`}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onClick={handleCanvasClick}
@@ -149,15 +223,8 @@ const Canvas: React.FC<CanvasProps> = ({
       {/* SVG Layer for Connections */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-10">
         <defs>
-          <marker
-            id="arrowhead"
-            markerWidth="10"
-            markerHeight="7"
-            refX="9"
-            refY="3.5"
-            orient="auto"
-          >
-            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" className="text-current" />
           </marker>
         </defs>
         {connections.map(conn => {
@@ -165,37 +232,28 @@ const Canvas: React.FC<CanvasProps> = ({
           const end = getCenter(conn.targetId);
           const midX = (start.x + end.x) / 2;
           const midY = (start.y + end.y) / 2;
+          const isDirected = conn.type !== 'undirected';
+          const strokeColor = conn.color || '#475569';
 
           return (
-            <g key={conn.id} className="pointer-events-auto group">
+            <g key={conn.id} className="pointer-events-auto group" style={{ color: strokeColor }}>
                {/* Invisible wide stroke for easier selection */}
               <line
-                x1={start.x}
-                y1={start.y}
-                x2={end.x}
-                y2={end.y}
-                stroke="transparent"
-                strokeWidth="15"
+                x1={start.x} y1={start.y} x2={end.x} y2={end.y}
+                stroke="transparent" strokeWidth="15"
                 className="cursor-pointer"
-                onClick={(e) => {
-                   e.stopPropagation();
-                   setEditingConnectionId(conn.id);
-                }}
+                onClick={(e) => { e.stopPropagation(); setEditingConnectionId(conn.id); }}
               />
               <line
-                x1={start.x}
-                y1={start.y}
-                x2={end.x}
-                y2={end.y}
-                stroke="#475569"
-                strokeWidth="2"
-                markerEnd="url(#arrowhead)"
-                className="group-hover:stroke-blue-400 transition-colors"
+                x1={start.x} y1={start.y} x2={end.x} y2={end.y}
+                stroke={strokeColor} strokeWidth="2"
+                markerEnd={isDirected ? "url(#arrowhead)" : undefined}
+                className="transition-colors opacity-80 group-hover:opacity-100"
               />
               {/* Label */}
               {(conn.label || editingConnectionId === conn.id) && (
                  <g transform={`translate(${midX}, ${midY})`}>
-                    <rect x="-20" y="-12" width="40" height="24" rx="4" fill="#0f172a" stroke="#334155" />
+                    <rect x="-20" y="-12" width="40" height="24" rx="4" fill="#0f172a" stroke={strokeColor} />
                     {editingConnectionId === conn.id ? (
                       <foreignObject x="-30" y="-12" width="60" height="24">
                         <input
@@ -208,10 +266,7 @@ const Canvas: React.FC<CanvasProps> = ({
                       </foreignObject>
                     ) : (
                       <text 
-                        x="0" y="4" 
-                        textAnchor="middle" 
-                        fill="#cbd5e1" 
-                        fontSize="10px"
+                        x="0" y="4" textAnchor="middle" fill="#cbd5e1" fontSize="10px"
                         className="pointer-events-none select-none"
                       >
                         {conn.label}
@@ -233,7 +288,7 @@ const Canvas: React.FC<CanvasProps> = ({
         })}
         {connectingSourceId && (
           <text x="20" y="30" fill="#3b82f6" className="text-sm font-mono font-bold drop-shadow-md">
-            • Select target to connect...
+            • Select target...
           </text>
         )}
       </svg>
@@ -242,7 +297,7 @@ const Canvas: React.FC<CanvasProps> = ({
       {components.map((comp) => {
         const isSelected = selectedId === comp.id;
         const isSource = connectingSourceId === comp.id;
-        const dims = getDimensions(comp.type);
+        const dims = getDimensions(comp);
         const spec = COMPONENT_SPECS[comp.type];
         
         const isLayer = comp.type === ComponentType.STRUCTURE_LAYER;
@@ -250,67 +305,92 @@ const Canvas: React.FC<CanvasProps> = ({
         const isEnd = comp.type === ComponentType.FLOW_END;
         const isDecision = comp.type === ComponentType.FLOW_DECISION;
         const isData = comp.type === ComponentType.FLOW_DATA;
+        const isText = comp.type === ComponentType.ANNOTATION_TEXT;
+        const isRect = comp.type === ComponentType.ANNOTATION_RECT;
+        const isCircle = comp.type === ComponentType.ANNOTATION_CIRCLE;
         
-        // Dynamic Labeling logic
+        // Dynamic Labeling
         let displayName = comp.tool || comp.customLabel || comp.label;
-        if (!displayName) {
+        if (!displayName && !isText) {
           const subType = spec?.subTypes?.find(s => s.id === comp.subType);
           displayName = subType?.label || spec?.label || 'Unknown';
         }
         
-        // Secondary label (e.g. Type Name)
         let typeName = spec?.label;
-        if (comp.customLabel) typeName = 'Generic / Custom';
-        // If the display name is effectively the type name, hide the secondary label to avoid duplication
-        const showTypeName = !isStart && !isEnd && !isDecision && typeName && displayName !== typeName && !comp.customLabel;
+        const showTypeName = !isStart && !isEnd && !isDecision && !isText && !isRect && !isCircle && typeName && displayName !== typeName;
 
         let baseClasses = "absolute flex flex-col items-center justify-center select-none transition-all shadow-lg";
-        let shapeStyles = {};
+        let shapeStyles: React.CSSProperties = {
+          borderColor: comp.color, // Apply user selected color override
+        };
 
+        // Base shape handling
         if (isLayer) {
            baseClasses += " border-2 border-dashed bg-slate-900/50 text-left items-start justify-start p-2 rounded-lg";
         } else if (isStart || isEnd) {
            baseClasses += " rounded-full border-4";
-        } else if (isDecision) {
-           // Decision Diamond
-           baseClasses += " z-20";
-        } else if (isData) {
-           // Parallelogram
-           baseClasses += " z-20";
+        } else if (isDecision || isData) {
+           baseClasses += " z-20"; // Special shapes
+        } else if (isText) {
+           baseClasses = "absolute flex items-center justify-center z-30 min-w-[100px] p-1"; // Text specific
+           shapeStyles.color = comp.color || '#cbd5e1';
+        } else if (isRect) {
+           baseClasses += " border-2 rounded-lg bg-slate-800/20 backdrop-blur-sm z-10";
+        } else if (isCircle) {
+           baseClasses += " border-2 rounded-full bg-slate-800/20 backdrop-blur-sm z-10";
         } else {
-           // Standard Box
-           baseClasses += " rounded-lg border-2 p-2";
+           baseClasses += " rounded-lg border-2 p-2"; // Standard box
         }
         
-        // Colors
+        // Color/State classes
         let colorClasses = "";
         if (isSelected) {
-          colorClasses = "border-blue-500 ring-2 ring-blue-500/50 z-30";
+          colorClasses = "border-blue-500 ring-2 ring-blue-500/50 z-30 shadow-blue-500/20";
         } else if (isSource) {
           colorClasses = "border-blue-400 ring-2 ring-blue-400 z-30 animate-pulse";
         } else {
-          if (isLayer) colorClasses = "border-slate-700 hover:border-slate-600 z-0";
-          else if (isStart) colorClasses = "border-green-600 bg-slate-900 hover:border-green-400 z-20";
-          else if (isEnd) colorClasses = "border-red-600 bg-slate-900 hover:border-red-400 z-20";
-          else if (isDecision) colorClasses = ""; // Handled in inner shape
-          else colorClasses = "border-slate-700 bg-slate-900 hover:border-slate-500 z-20";
+          // Defaults if no specific color prop is set (fallback)
+          if (!comp.color) {
+            if (isLayer) colorClasses = "border-slate-700 hover:border-slate-600 z-0";
+            else if (isStart) colorClasses = "border-green-600 bg-slate-900 hover:border-green-400 z-20";
+            else if (isEnd) colorClasses = "border-red-600 bg-slate-900 hover:border-red-400 z-20";
+            else if (!isDecision && !isData && !isText && !isRect && !isCircle) colorClasses = "border-slate-700 bg-slate-900 hover:border-slate-500 z-20";
+          } else {
+            // If custom color is set, we handle it via inline styles mostly, but add base z-index
+             colorClasses = "bg-slate-900 z-20";
+             if (isRect || isCircle) colorClasses = "z-10";
+          }
         }
 
-        const renderContent = () => (
-          <>
-             <div className={`mb-1 ${isSelected ? 'text-blue-400' : (isStart ? 'text-green-500' : (isEnd ? 'text-red-500' : 'text-slate-400'))}`}>
-                {getIconForType(comp.type)}
-              </div>
-              <div className="text-xs font-bold text-center text-slate-200 truncate w-full px-1" title={displayName}>
-                {displayName}
-              </div>
-              {showTypeName && (
-                <div className="text-[9px] text-center text-slate-500 truncate w-full px-1">
-                  {typeName}
+        const renderContent = () => {
+          if (isText) {
+             return (
+               <input 
+                 autoFocus={!comp.customLabel}
+                 value={comp.customLabel || comp.label}
+                 onChange={(e) => handleLabelChange(comp.id, e.target.value)}
+                 className="bg-transparent border-none text-center focus:outline-none w-full h-full font-bold text-lg"
+                 style={{ color: comp.color || '#cbd5e1' }}
+                 onKeyDown={(e) => { e.stopPropagation(); }} // Allow typing
+               />
+             );
+          }
+          return (
+            <>
+               <div className={`mb-1 ${isSelected ? 'text-blue-400' : (isStart ? 'text-green-500' : (isEnd ? 'text-red-500' : 'text-slate-400'))}`} style={comp.color ? { color: comp.color } : {}}>
+                  {getIconForType(comp.type)}
                 </div>
-              )}
-          </>
-        );
+                <div className="text-xs font-bold text-center text-slate-200 truncate w-full px-1" title={displayName}>
+                  {displayName}
+                </div>
+                {showTypeName && (
+                  <div className="text-[9px] text-center text-slate-500 truncate w-full px-1">
+                    {typeName}
+                  </div>
+                )}
+            </>
+          );
+        };
 
         return (
           <div
@@ -337,13 +417,13 @@ const Canvas: React.FC<CanvasProps> = ({
 
             {/* Shape Logic */}
             {isDecision ? (
-              <div className={`w-full h-full transform rotate-45 border-2 bg-slate-900 flex items-center justify-center ${isSelected ? 'border-blue-500' : 'border-yellow-600 hover:border-yellow-500'}`}>
+              <div className={`w-full h-full transform rotate-45 border-2 bg-slate-900 flex items-center justify-center ${isSelected ? 'border-blue-500' : 'hover:border-slate-500'}`} style={{ borderColor: comp.color || (isSelected ? undefined : '#ca8a04') }}>
                  <div className="transform -rotate-45 flex flex-col items-center w-full">
                     {renderContent()}
                  </div>
               </div>
             ) : isData ? (
-               <div className={`w-full h-full transform -skew-x-12 border-2 bg-slate-900 flex items-center justify-center ${isSelected ? 'border-blue-500' : 'border-purple-600 hover:border-purple-500'}`}>
+               <div className={`w-full h-full transform -skew-x-12 border-2 bg-slate-900 flex items-center justify-center ${isSelected ? 'border-blue-500' : 'hover:border-slate-500'}`} style={{ borderColor: comp.color || (isSelected ? undefined : '#9333ea') }}>
                   <div className="transform skew-x-12 flex flex-col items-center w-full px-4">
                      {renderContent()}
                   </div>
@@ -362,12 +442,6 @@ const Canvas: React.FC<CanvasProps> = ({
           </div>
         );
       })}
-
-      <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur border border-slate-700 p-3 rounded text-xs text-slate-400 pointer-events-none select-none z-50">
-        <p>• <strong>Shift + Click</strong> two nodes to connect</p>
-        <p>• Click connection to add label</p>
-        <p>• Drag items from 16-layer list</p>
-      </div>
     </div>
   );
 };

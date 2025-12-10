@@ -4,7 +4,8 @@ import {
   Layers, Box, MessageSquare, Webhook, 
   Clock, PlayCircle, StopCircle, Repeat, Layout, 
   Cpu, GitBranch, ArrowRightLeft, Square,
-  Wifi, Scale, Settings, FileCheck, Share2, Archive, Lock, Zap
+  Wifi, Scale, Settings, FileCheck, Share2, Archive, Lock, Zap,
+  Type, Circle, SquareDashed
 } from 'lucide-react';
 import { ComponentType, ComponentDefinition } from './types';
 
@@ -95,20 +96,34 @@ export const COMPONENT_SPECS: Record<string, ComponentDefinition> = {
     type: ComponentType.DATABASE,
     label: '4. Data Storage',
     icon: <Database size={20} />,
-    description: 'Stores structured & semi-structured data.',
+    description: 'Stores structured, semi-structured, and unstructured data.',
     subTypes: [
       // 4.1 Data Models
-      { id: 'rdbms', category: '4.1 Data Models', label: 'Relational (SQL)', description: 'Tabular data.', tools: ['PostgreSQL', 'MySQL', 'Aurora', 'SQL Server', 'Oracle'] },
-      { id: 'document', category: '4.1 Data Models', label: 'Document Store', description: 'JSON/BSON.', tools: ['MongoDB', 'DocumentDB', 'Couchbase'] },
-      { id: 'kv', category: '4.1 Data Models', label: 'Key-Value', description: 'Simple lookup.', tools: ['Redis', 'DynamoDB', 'Riak'] },
-      { id: 'wide_col', category: '4.1 Data Models', label: 'Wide-Column', description: 'Scalable rows.', tools: ['Cassandra', 'HBase', 'ScyllaDB'] },
-      { id: 'graph', category: '4.1 Data Models', label: 'Graph DB', description: 'Relationships.', tools: ['Neo4j', 'Neptune', 'JanusGraph'] },
-      { id: 'timeseries', category: '4.1 Data Models', label: 'Time-Series', description: 'Time-stamped.', tools: ['InfluxDB', 'TimescaleDB'] },
-      { id: 'vector', category: '4.1 Data Models', label: 'Vector DB', description: 'Embeddings.', tools: ['Pinecone', 'Milvus', 'Weaviate'] },
+      { id: 'rdbms', category: '4.1 Data Models', label: 'Relational (SQL)', description: 'Tabular structured data.', tools: ['PostgreSQL', 'MySQL', 'Aurora', 'SQL Server', 'Oracle'] },
+      { id: 'document', category: '4.1 Data Models', label: 'Document-oriented', description: 'JSON/BSON flexible schema.', tools: ['MongoDB', 'DocumentDB', 'Couchbase', 'Firestore'] },
+      { id: 'kv', category: '4.1 Data Models', label: 'Key-Value', description: 'Simple fast lookup.', tools: ['Redis', 'DynamoDB', 'Riak', 'Memcached'] },
+      { id: 'wide_col', category: '4.1 Data Models', label: 'Wide-column', description: 'Scalable sparse rows.', tools: ['Cassandra', 'HBase', 'ScyllaDB', 'BigTable'] },
+      { id: 'graph', category: '4.1 Data Models', label: 'Graph DB', description: 'Relationships & Nodes.', tools: ['Neo4j', 'Neptune', 'JanusGraph', 'TigerGraph'] },
+      { id: 'timeseries', category: '4.1 Data Models', label: 'Time-series', description: 'Time-stamped metrics.', tools: ['InfluxDB', 'TimescaleDB', 'Prometheus'] },
+      { id: 'geospatial', category: '4.1 Data Models', label: 'Geospatial', description: 'Location & spatial data.', tools: ['PostGIS', 'MongoDB Geo', 'Elasticsearch Geo'] },
+      { id: 'vector', category: '4.1 Data Models', label: 'Vector DB', description: 'High-dimensional embeddings.', tools: ['Pinecone', 'Milvus', 'Weaviate', 'Chroma'] },
 
-      // 4.2 Data Management
-      { id: 'sharding', category: '4.2 Data Management', label: 'Sharding', description: 'Horizontal partition.', tools: ['Vitess', 'Citus'] },
-      { id: 'replication', category: '4.2 Data Management', label: 'Replication', description: 'Redundancy.', tools: ['Multi-AZ', 'Read Replica'] }
+      // 4.2 Data Management Concepts
+      { id: 'indexing', category: '4.2 Data Management Concepts', label: 'Indexing', description: 'Optimize retrieval.', tools: ['B-Tree', 'LSM Tree', 'Global Index', 'Inverted Index'] },
+      { id: 'sharding', category: '4.2 Data Management Concepts', label: 'Partitioning / Sharding', description: 'Horizontal scaling.', tools: ['Hash Sharding', 'Range Sharding', 'Vitess', 'Citus'] },
+      { id: 'replication', category: '4.2 Data Management Concepts', label: 'Replication', description: 'Data copying.', tools: ['Master-Slave', 'Multi-Master', 'Read Replica'] },
+      { id: 'snapshots', category: '4.2 Data Management Concepts', label: 'Snapshots', description: 'Point-in-time copy.', tools: ['EBS Snapshot', 'DB Snapshot'] },
+      { id: 'backup', category: '4.2 Data Management Concepts', label: 'Backup & Restore', description: 'Disaster recovery.', tools: ['PITR', 'Daily Dump', 'Velero'] },
+      { id: 'archival', category: '4.2 Data Management Concepts', label: 'Archival', description: 'Long-term retention.', tools: ['Cold Storage', 'Glacier'] },
+      { id: 'schema_mgmt', category: '4.2 Data Management Concepts', label: 'Schema Management', description: 'Structure evolution.', tools: ['Flyway', 'Liquibase', 'Schema Registry'] },
+      { id: 'query_opt', category: '4.2 Data Management Concepts', label: 'Query Optimization', description: 'Performance tuning.', tools: ['Materialized Views', 'Query Planner'] },
+
+      // 4.3 Data Consistency
+      { id: 'strong_cons', category: '4.3 Data Consistency', label: 'Strong Consistency', description: 'Linearizability.', tools: ['CP System', 'Paxos', 'Raft'] },
+      { id: 'eventual_cons', category: '4.3 Data Consistency', label: 'Eventual Consistency', description: 'BASE properties.', tools: ['AP System', 'Gossip Protocol'] },
+      { id: 'read_write_cons', category: '4.3 Data Consistency', label: 'Read-after-Write', description: 'Session consistency.', tools: ['Sticky Session', 'Synchronous Rep'] },
+      { id: 'causal_cons', category: '4.3 Data Consistency', label: 'Causal Consistency', description: 'Causal order.', tools: ['Vector Clocks'] },
+      { id: 'tunable_cons', category: '4.3 Data Consistency', label: 'Tunable Consistency', description: 'Configurable quorums.', tools: ['Quorum R+W>N', 'Cassandra CL'] },
     ]
   },
 
@@ -321,5 +336,10 @@ export const COMPONENT_SPECS: Record<string, ComponentDefinition> = {
   [ComponentType.FLOW_TIMER]: { type: ComponentType.FLOW_TIMER, label: 'Timer', icon: <Clock size={20} />, description: 'Schedule.', subTypes: [] },
   [ComponentType.FLOW_EVENT]: { type: ComponentType.FLOW_EVENT, label: 'Event', icon: <Webhook size={20} />, description: 'Trigger.', subTypes: [] },
   [ComponentType.STRUCTURE_LAYER]: { type: ComponentType.STRUCTURE_LAYER, label: 'Zone / Layer', icon: <Layout size={20} />, description: 'Logical grouping.', subTypes: [] },
-  [ComponentType.CUSTOM]: { type: ComponentType.CUSTOM, label: 'Custom Tool', icon: <Box size={20} />, description: 'Custom component.', subTypes: [] }
+  [ComponentType.CUSTOM]: { type: ComponentType.CUSTOM, label: 'Custom Tool', icon: <Box size={20} />, description: 'Custom component.', subTypes: [] },
+
+  // Annotations
+  [ComponentType.ANNOTATION_TEXT]: { type: ComponentType.ANNOTATION_TEXT, label: 'Text', icon: <Type size={20} />, description: 'Text Annotation', subTypes: [] },
+  [ComponentType.ANNOTATION_RECT]: { type: ComponentType.ANNOTATION_RECT, label: 'Rectangle', icon: <SquareDashed size={20} />, description: 'Grouping Box', subTypes: [] },
+  [ComponentType.ANNOTATION_CIRCLE]: { type: ComponentType.ANNOTATION_CIRCLE, label: 'Circle', icon: <Circle size={20} />, description: 'Circular Zone', subTypes: [] },
 };

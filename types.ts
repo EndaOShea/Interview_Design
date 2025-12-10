@@ -59,6 +59,11 @@ export enum ComponentType {
   FLOW_TIMER = 'Timer',
   FLOW_EVENT = 'Event',
   STRUCTURE_LAYER = 'Layer',
+
+  // Annotations
+  ANNOTATION_TEXT = 'Text',
+  ANNOTATION_RECT = 'Rectangle',
+  ANNOTATION_CIRCLE = 'Circle',
   
   // Fallback
   CUSTOM = 'Custom'
@@ -91,6 +96,7 @@ export interface SystemComponent {
   tool?: string;    // Specific tool name
   label?: string;   // Display label
   customLabel?: string; // User override
+  color?: string; // Hex color for styling
 }
 
 export interface Connection {
@@ -98,6 +104,8 @@ export interface Connection {
   sourceId: string;
   targetId: string;
   label?: string;
+  type?: 'directed' | 'undirected'; // Arrow vs Line
+  color?: string;
 }
 
 export interface Challenge {
@@ -115,4 +123,14 @@ export interface EvaluationResult {
   cons: string[];
   recommendations: string[];
   securityConcerns: string[];
+}
+
+export interface HintResult {
+  suggestedComponents: {
+    layer: string;
+    component: string;
+    reason: string;
+  }[];
+  architectureStrategy: string;
+  keyConsiderations: string[];
 }

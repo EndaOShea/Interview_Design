@@ -1,11 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { COMPONENT_SPECS } from '../constants';
 import { ComponentType, ComponentSubType } from '../types';
-import { Plus, Trash2, Wrench, ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Wrench, ChevronDown, ChevronRight, GripVertical, Box } from 'lucide-react';
+
+interface CustomTool {
+  name: string;
+  type: ComponentType;
+}
 
 const Sidebar: React.FC = () => {
-  const [customTools, setCustomTools] = useState<string[]>([]);
+  const [customTools, setCustomTools] = useState<CustomTool[]>([]);
   const [newToolName, setNewToolName] = useState('');
+  const [newToolType, setNewToolType] = useState<string>(''); // Stores the selected ComponentType
   
   // State for expanded layers (Level 1)
   const [expandedLayers, setExpandedLayers] = useState<Record<string, boolean>>({});
@@ -31,9 +37,10 @@ const Sidebar: React.FC = () => {
   };
 
   const addCustomTool = () => {
-    if (newToolName.trim()) {
-      setCustomTools([...customTools, newToolName.trim()]);
+    if (newToolName.trim() && newToolType) {
+      setCustomTools([...customTools, { name: newToolName.trim(), type: newToolType as ComponentType }]);
       setNewToolName('');
+      // We keep the selected type for convenience, or could reset it: setNewToolType('');
     }
   };
 
@@ -45,16 +52,16 @@ const Sidebar: React.FC = () => {
   // We want to skip Flow/Structure types in the main list
   const systemLayers = useMemo(() => {
     return Object.values(COMPONENT_SPECS).filter(spec => 
-      !spec.type.startsWith('Start') && 
-      !spec.type.startsWith('End') &&
-      !spec.type.startsWith('Process') &&
-      !spec.type.startsWith('Decision') &&
-      !spec.type.startsWith('Data') &&
-      !spec.type.startsWith('Loop') &&
-      !spec.type.startsWith('Timer') &&
-      !spec.type.startsWith('Event') &&
-      !spec.type.startsWith('Layer') &&
-      !spec.type.startsWith('Custom')
+      spec.type !== ComponentType.FLOW_START &&
+      spec.type !== ComponentType.FLOW_END &&
+      spec.type !== ComponentType.FLOW_PROCESS &&
+      spec.type !== ComponentType.FLOW_DECISION &&
+      spec.type !== ComponentType.FLOW_DATA &&
+      spec.type !== ComponentType.FLOW_LOOP &&
+      spec.type !== ComponentType.FLOW_TIMER &&
+      spec.type !== ComponentType.FLOW_EVENT &&
+      spec.type !== ComponentType.STRUCTURE_LAYER &&
+      spec.type !== ComponentType.CUSTOM
     );
   }, []);
 
@@ -171,43 +178,64 @@ const Sidebar: React.FC = () => {
             <h2 className="text-[10px] font-bold text-slate-500 uppercase mb-3 flex items-center justify-between tracking-wider px-2">
               Custom Tools
             </h2>
-            <div className="flex gap-2 mb-3 px-2">
+            <div className="flex flex-col gap-2 mb-3 px-2">
               <input
                 type="text"
                 value={newToolName}
                 onChange={(e) => setNewToolName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addCustomTool()}
-                placeholder="New tool..."
-                className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                placeholder="Tool Name..."
+                className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
               />
-              <button 
-                onClick={addCustomTool}
-                className="bg-blue-600 hover:bg-blue-500 text-white p-1 rounded transition-colors"
-              >
-                <Plus size={14} />
-              </button>
+              <div className="flex gap-2">
+                <select
+                  value={newToolType}
+                  onChange={(e) => setNewToolType(e.target.value)}
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">Select Layer...</option>
+                  {systemLayers.map(layer => (
+                    <option key={layer.type} value={layer.type}>{layer.label}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={addCustomTool}
+                  disabled={!newToolName.trim() || !newToolType}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white p-1.5 rounded transition-colors"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
             </div>
             
             <div className="space-y-1 px-2">
-              {customTools.map((tool, idx) => (
-                <div
-                  key={`custom-${idx}`}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, ComponentType.CUSTOM, tool)}
-                  className="flex items-center justify-between p-2 bg-slate-800/50 rounded border border-slate-700/50 cursor-grab hover:bg-slate-700 group"
-                >
-                  <div className="flex items-center gap-2">
-                    <Wrench size={12} className="text-purple-400" />
-                    <span className="text-xs text-slate-300 truncate max-w-[120px]" title={tool}>{tool}</span>
-                  </div>
-                  <button 
-                    onClick={() => removeCustomTool(idx)}
-                    className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+              {customTools.map((tool, idx) => {
+                const spec = COMPONENT_SPECS[tool.type];
+                return (
+                  <div
+                    key={`custom-${idx}`}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, tool.type, tool.name)}
+                    className="flex items-center justify-between p-2 bg-slate-800/50 rounded border border-slate-700/50 cursor-grab hover:bg-slate-700 group"
                   >
-                    <Trash2 size={12} />
-                  </button>
+                    <div className="flex items-center gap-2">
+                      <div className="text-slate-400">{spec?.icon || <Box size={12}/>}</div>
+                      <span className="text-xs text-slate-300 truncate max-w-[120px]" title={tool.name}>{tool.name}</span>
+                    </div>
+                    <button 
+                      onClick={() => removeCustomTool(idx)}
+                      className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+              {customTools.length === 0 && (
+                <div className="text-[10px] text-slate-500 text-center py-2 italic">
+                  Create tools mapped to specific layers above.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
