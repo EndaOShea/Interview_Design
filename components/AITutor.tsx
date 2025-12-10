@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Challenge, HintResult } from '../types';
 import { createTutorChat } from '../services/gemini';
+import { COMPONENT_SPECS } from '../constants';
 import { Chat, GenerateContentResponse } from '@google/genai';
 import { MessageCircle, X, Send, Settings, Key, Bot, User, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -43,6 +44,12 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
   // Initialize Chat Session when Key or Challenge/Hints change
   useEffect(() => {
     if (apiKey && challenge) {
+      // Generate Context about available tools
+      const componentContext = Object.values(COMPONENT_SPECS).map(spec => {
+        const subTypes = spec.subTypes?.map(s => `${s.label}`).join(', ');
+        return `- ${spec.label}: ${spec.description}${subTypes ? ` (Includes: ${subTypes})` : ''}`;
+      }).join('\n');
+
       const systemPrompt = `
         You are an expert System Design Tutor. Your goal is to help the user learn by guiding them through the current challenge.
         
@@ -57,11 +64,31 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
         Recommended Components: ${hints.suggestedComponents.map(c => c.component).join(', ')}
         ` : ''}
         
+        AVAILABLE TOOLBOX & UI CONTEXT:
+        The user is working in a drag-and-drop editor with the following capabilities:
+        
+        1. **System Layers & Components** (Available in Sidebar):
+        ${componentContext}
+        
+        2. **Logic & Flow Items**:
+           - Start, End, Process, Decision, Data I/O, Loop, Timer, Event.
+        
+        3. **Bottom Toolbar Tools**:
+           - Selection Tool (Move/Edit)
+           - Connectors: Arrow (Directed), Line (Undirected), Loop (Self/Curved)
+           - Annotations: Text, Rectangle, Circle
+           - Pen (Freehand Drawing)
+        
+        4. **Customization**:
+           - Users can create "Custom Tools" in the sidebar if a specific technology is missing from the presets.
+           - Users can configure specific technologies (e.g., choosing "PostgreSQL" for a generic "Relational DB" node).
+
         GUIDELINES:
         1. Be helpful, encouraging, and Socratic. Don't just give the answer; ask leading questions.
         2. Keep answers concise (max 3-4 sentences) unless asked for details.
         3. If the user asks about specific technologies, explain trade-offs (e.g., SQL vs NoSQL).
         4. Focus on the requirements of the current challenge.
+        5. When suggesting components, refer to the names listed in the Toolbox so the user can find them.
       `;
 
       try {
