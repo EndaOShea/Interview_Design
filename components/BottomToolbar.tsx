@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   MousePointer2, ArrowRight, Minus, Type, Square, Circle, 
-  Palette, ChevronUp, Check 
+  Palette, Check, ZoomIn, ZoomOut, Maximize
 } from 'lucide-react';
 
 export type ToolType = 'select' | 'connect_arrow' | 'connect_line' | 'text' | 'rect' | 'circle';
@@ -11,6 +11,9 @@ interface BottomToolbarProps {
   setActiveTool: (tool: ToolType) => void;
   selectedColor: string;
   setSelectedColor: (color: string) => void;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
+  onZoomReset: () => void;
 }
 
 const COLORS = [
@@ -28,7 +31,10 @@ const BottomToolbar: React.FC<BottomToolbarProps> = ({
   activeTool, 
   setActiveTool, 
   selectedColor, 
-  setSelectedColor 
+  setSelectedColor,
+  zoom,
+  onZoomChange,
+  onZoomReset
 }) => {
   const [showColorPicker, setShowColorPicker] = useState(false);
 
@@ -43,7 +49,6 @@ const BottomToolbar: React.FC<BottomToolbarProps> = ({
       title={label}
     >
       {icon}
-      {/* Tooltip */}
       <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
         {label}
       </span>
@@ -111,6 +116,33 @@ const BottomToolbar: React.FC<BottomToolbarProps> = ({
               ))}
             </div>
           )}
+        </div>
+
+        <div className="w-px h-8 bg-slate-700 mx-1" />
+
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-1 px-1">
+          <button 
+            onClick={() => onZoomChange(Math.max(0.1, zoom - 0.1))}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg"
+          >
+            <ZoomOut size={16} />
+          </button>
+          
+          <button 
+             onClick={onZoomReset}
+             className="w-12 text-xs font-mono text-slate-400 hover:text-white text-center hover:bg-slate-700/50 rounded py-1"
+             title="Reset Zoom"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+
+          <button 
+            onClick={() => onZoomChange(Math.min(4, zoom + 0.1))}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg"
+          >
+            <ZoomIn size={16} />
+          </button>
         </div>
         
       </div>

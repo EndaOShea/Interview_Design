@@ -10,6 +10,12 @@ import { generateChallenge, evaluateDesign, generateHints } from './services/gem
 import { SystemComponent, Connection, ComponentType, Challenge, EvaluationResult, HintResult } from './types';
 import { COMPONENT_SPECS } from './constants';
 
+export interface ViewState {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
 const App: React.FC = () => {
   // State
   const [components, setComponents] = useState<SystemComponent[]>([]);
@@ -18,6 +24,9 @@ const App: React.FC = () => {
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [hintResult, setHintResult] = useState<HintResult | null>(null);
   
+  // View State (Pan & Zoom)
+  const [viewState, setViewState] = useState<ViewState>({ x: 0, y: 0, zoom: 1 });
+
   // UI State
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -44,24 +53,25 @@ const App: React.FC = () => {
 
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
-    // If dropping a sidebar item, ensure we are in select mode to interact with it properly later
     if (activeTool !== 'select') setActiveTool('select');
 
     const type = event.dataTransfer.getData('application/reactflow') as ComponentType;
-    const customLabel = event.dataTransfer.getData('application/reactflow-label'); // From Level 1 or 2
-    const subTypeId = event.dataTransfer.getData('application/reactflow-subtype'); // From Level 3
+    const customLabel = event.dataTransfer.getData('application/reactflow-label');
+    const subTypeId = event.dataTransfer.getData('application/reactflow-subtype');
     
     if (!type) return;
 
-    // Approximate position
-    const position = {
-      x: event.clientX - 288 - 70, // Adjust for wider sidebar
-      y: event.clientY - 64 - 40,
-    };
+    // Calculate Position relative to Canvas World Space
+    // Sidebar width = 288px (w-72), TopBar height ~64px
+    const sidebarWidth = 288;
+    const topBarHeight = 64;
+    
+    // Convert screen coordinates to canvas world coordinates
+    const worldX = (event.clientX - sidebarWidth - viewState.x) / viewState.zoom;
+    const worldY = (event.clientY - topBarHeight - viewState.y) / viewState.zoom;
 
     const spec = COMPONENT_SPECS[type];
     
-    // Determine initial label
     let label = spec?.label;
     if (customLabel) label = customLabel;
     if (subTypeId && spec?.subTypes) {
@@ -72,12 +82,12 @@ const App: React.FC = () => {
     const draft = {
       id: `node-${Date.now()}`,
       type,
-      x: Math.max(0, position.x),
-      y: Math.max(0, position.y),
+      x: worldX - 70, // Center approx component width
+      y: worldY - 40, // Center approx component height
       label: label,
       customLabel: customLabel || undefined,
       subType: subTypeId || undefined,
-      color: selectedColor // Apply current color
+      color: selectedColor
     };
 
     const hasSubTypes = spec?.subTypes && spec.subTypes.length > 0;
@@ -165,13 +175,12 @@ const App: React.FC = () => {
       setComponents([]);
       setConnections([]);
       setEvaluation(null);
+      setViewState({ x: 0, y: 0, zoom: 1 }); // Reset view
     }
   };
 
-  // Change selected item color when color picker changes
   const applyColorToSelection = (color: string) => {
     setSelectedColor(color);
-    // Logic to update selected component/connection is handled inside Canvas or we can pass this down
   };
 
   return (
@@ -201,6 +210,8 @@ const App: React.FC = () => {
           activeTool={activeTool}
           setActiveTool={setActiveTool}
           selectedColor={selectedColor}
+          viewState={viewState}
+          setViewState={setViewState}
         />
 
         <BottomToolbar 
@@ -208,6 +219,9 @@ const App: React.FC = () => {
           setActiveTool={setActiveTool}
           selectedColor={selectedColor}
           setSelectedColor={applyColorToSelection}
+          zoom={viewState.zoom}
+          onZoomChange={(z) => setViewState(prev => ({ ...prev, zoom: z }))}
+          onZoomReset={() => setViewState({ x: 0, y: 0, zoom: 1 })}
         />
         
         {challenge && (

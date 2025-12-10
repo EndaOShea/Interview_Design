@@ -49,7 +49,7 @@ const Sidebar: React.FC = () => {
   };
 
   // Organize components by their 1-16 index (relying on insertion order in constants or helper)
-  // We want to skip Flow/Structure types in the main list
+  // We want to skip Flow/Structure types AND Annotation types in the main list
   const systemLayers = useMemo(() => {
     return Object.values(COMPONENT_SPECS).filter(spec => 
       spec.type !== ComponentType.FLOW_START &&
@@ -61,7 +61,10 @@ const Sidebar: React.FC = () => {
       spec.type !== ComponentType.FLOW_TIMER &&
       spec.type !== ComponentType.FLOW_EVENT &&
       spec.type !== ComponentType.STRUCTURE_LAYER &&
-      spec.type !== ComponentType.CUSTOM
+      spec.type !== ComponentType.CUSTOM &&
+      spec.type !== ComponentType.ANNOTATION_TEXT &&
+      spec.type !== ComponentType.ANNOTATION_RECT &&
+      spec.type !== ComponentType.ANNOTATION_CIRCLE
     );
   }, []);
 
