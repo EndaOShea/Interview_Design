@@ -93,14 +93,15 @@ export interface SystemComponent {
   y: number;
   width?: number;
   height?: number;
-  
+
   // Configuration
   subType?: string; // ID of the sub type
   tool?: string;    // Specific tool name
   label?: string;   // Display label
   customLabel?: string; // User override
   color?: string; // Hex color for styling
-  
+  zOrder?: number; // Custom z-order for layering (higher = front)
+
   // For Freehand
   points?: {x: number, y: number}[];
 }

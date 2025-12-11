@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  MousePointer2, ArrowRight, Minus, Type, Square, Circle, 
+import React from 'react';
+import {
+  MousePointer2, ArrowRight, Minus, Type, Square, Circle,
   ZoomIn, ZoomOut, RotateCw, PenTool, Undo2
 } from 'lucide-react';
+import { ComponentType } from '../types';
 
 export type ToolType = 'select' | 'connect_arrow' | 'connect_line' | 'connect_loop' | 'text' | 'rect' | 'circle' | 'pen';
 
@@ -18,85 +19,50 @@ interface BottomToolbarProps {
   canUndo?: boolean;
 }
 
-const DEFAULT_NAVY = '#1e3a8a';
-const DEFAULT_YELLOW = '#eab308'; // for loop
-
-const BottomToolbar: React.FC<BottomToolbarProps> = ({ 
-  activeTool, 
-  setActiveTool, 
-  setSelectedColor,
+const BottomToolbar: React.FC<BottomToolbarProps> = ({
+  activeTool,
+  setActiveTool,
   zoom,
   onZoomChange,
   onZoomReset,
   onUndo,
   canUndo = false
 }) => {
-  // Local state for tool colors
-  const [toolColors, setToolColors] = useState<Record<string, string>>({
-    connect_arrow: DEFAULT_NAVY,
-    connect_line: DEFAULT_NAVY,
-    connect_loop: DEFAULT_YELLOW, // Loop default yellow
-    text: DEFAULT_NAVY,
-    rect: DEFAULT_NAVY,
-    circle: DEFAULT_NAVY,
-    pen: DEFAULT_NAVY
-  });
 
-  // When active tool changes, propagate its color to the App's selectedColor
-  useEffect(() => {
-    if (activeTool !== 'select' && toolColors[activeTool]) {
-      setSelectedColor(toolColors[activeTool]);
-    }
-  }, [activeTool, toolColors, setSelectedColor]);
-
-  const handleToolColorChange = (tool: string, color: string) => {
-    setToolColors(prev => ({ ...prev, [tool]: color }));
-    // If we are changing the color of the *current* tool, update global selection immediately
-    if (activeTool === tool) {
-      setSelectedColor(color);
-    }
-  };
-
-  const ToolButton = ({ tool, icon, label }: { tool: ToolType, icon: React.ReactNode, label: string }) => {
+  const ToolButton = ({ tool, icon, label, draggable, componentType }: {
+    tool: ToolType,
+    icon: React.ReactNode,
+    label: string,
+    draggable?: boolean,
+    componentType?: string
+  }) => {
     const isActive = activeTool === tool;
-    // Don't show picker for select tool
-    const hasPicker = tool !== 'select';
-    
+
+    const handleDragStart = (e: React.DragEvent) => {
+      if (draggable && componentType) {
+        e.dataTransfer.setData('application/reactflow', componentType);
+        e.dataTransfer.setData('application/reactflow-label', label);
+        e.dataTransfer.effectAllowed = 'move';
+      }
+    };
+
     return (
-      <div className="relative group flex items-center">
-         <button
-          onClick={() => setActiveTool(tool)}
-          className={`p-2 rounded-lg transition-all flex items-center justify-center relative ${
-            isActive 
-              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
-              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-          }`}
-          title={label}
-        >
-          {icon}
-          <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-            {label}
-          </span>
-        </button>
-        
-        {/* Tiny Color Picker beside the tool */}
-        {hasPicker && (
-           <div className="absolute -right-1 bottom-1 w-2.5 h-2.5 z-10 hover:scale-125 transition-transform">
-             <label 
-                htmlFor={`tool-color-${tool}`}
-                className="block w-full h-full rounded-full cursor-pointer border border-slate-900 shadow-sm"
-                style={{ backgroundColor: toolColors[tool] }}
-              />
-              <input
-                id={`tool-color-${tool}`}
-                type="color"
-                value={toolColors[tool]}
-                onChange={(e) => handleToolColorChange(tool, e.target.value)}
-                className="absolute opacity-0 w-0 h-0 pointer-events-none"
-              />
-           </div>
-        )}
-      </div>
+      <button
+        onClick={() => setActiveTool(tool)}
+        draggable={draggable}
+        onDragStart={handleDragStart}
+        className={`p-2 rounded-lg transition-all flex items-center justify-center relative group ${
+          isActive
+            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+        } ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        title={label}
+      >
+        {icon}
+        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+          {label}
+        </span>
+      </button>
     );
   };
 
@@ -117,9 +83,9 @@ const BottomToolbar: React.FC<BottomToolbarProps> = ({
         
         <div className="w-px h-6 bg-slate-700 mx-1" />
         
-        <ToolButton tool="text" icon={<Type size={16} />} label="Text" />
-        <ToolButton tool="rect" icon={<Square size={16} />} label="Rectangle" />
-        <ToolButton tool="circle" icon={<Circle size={16} />} label="Circle" />
+        <ToolButton tool="text" icon={<Type size={16} />} label="Text" draggable={true} componentType={ComponentType.ANNOTATION_TEXT} />
+        <ToolButton tool="rect" icon={<Square size={16} />} label="Rectangle" draggable={true} componentType={ComponentType.ANNOTATION_RECT} />
+        <ToolButton tool="circle" icon={<Circle size={16} />} label="Circle" draggable={true} componentType={ComponentType.ANNOTATION_CIRCLE} />
         
         <div className="w-px h-6 bg-slate-700 mx-1" />
 

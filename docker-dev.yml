@@ -1,0 +1,22 @@
+services:
+  architectai-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: architectai-dev
+    ports:
+      - "2351:3000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      # Mount source code for hot reload
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - architectai-network
+    command: npm run dev
+
+networks:
+  architectai-network:
+    driver: bridge

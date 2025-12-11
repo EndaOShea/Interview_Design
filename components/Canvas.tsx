@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { SystemComponent, Connection, ComponentType } from '../types';
 import { getIconForType, COMPONENT_SPECS } from '../constants';
 import { ToolType } from './BottomToolbar';
-import { X, Scaling } from 'lucide-react';
+import { X, Scaling, ArrowUp, ArrowDown } from 'lucide-react';
 import { ViewState } from '../App';
 
 interface CanvasProps {
@@ -38,15 +38,19 @@ const Canvas: React.FC<CanvasProps> = ({
   onSnapshot
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null);
   const [tempConnectionTarget, setTempConnectionTarget] = useState<{x: number, y: number} | null>(null);
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null);
-  
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggedComponent, setDraggedComponent] = useState<{id: string, startX: number, startY: number} | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [currentDrawingId, setCurrentDrawingId] = useState<string | null>(null);
+  const [marqueeStart, setMarqueeStart] = useState<{x: number, y: number} | null>(null);
+  const [marqueeEnd, setMarqueeEnd] = useState<{x: number, y: number} | null>(null);
 
   // Resize State
   const [resizing, setResizing] = useState<{
@@ -60,31 +64,61 @@ const Canvas: React.FC<CanvasProps> = ({
     handle: string; // 'nw', 'ne', 'sw', 'se'
   } | null>(null);
 
-  // Apply selected color to currently selected item if it changes
+  // Apply selected color to currently selected items ONLY when color changes (not on selection)
   useEffect(() => {
     if (selectedId) {
       setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, color: selectedColor } : c));
+    } else if (selectedIds.length > 0) {
+      setComponents(prev => prev.map(c => selectedIds.includes(c.id) ? { ...c, color: selectedColor } : c));
     }
-  }, [selectedColor, selectedId]);
+  }, [selectedColor]); // Removed selectedId from dependencies
 
-  // Keyboard Event Listener for Deletion
+  // Keyboard Event Listener for Deletion and Layering
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
-        // Prevent deletion if the user is typing in an input field
-        const activeTag = document.activeElement?.tagName.toLowerCase();
-        if (activeTag === 'input' || activeTag === 'textarea') return;
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
 
-        onSnapshot(); // Save state before delete
-        setComponents(prev => prev.filter(c => c.id !== selectedId));
-        setConnections(prev => prev.filter(c => c.sourceId !== selectedId && c.targetId !== selectedId));
-        setSelectedId(null);
+      if ((e.key === 'Delete' || e.key === 'Backspace')) {
+        if (selectedId) {
+          e.preventDefault();
+          onSnapshot(); // Save state before delete
+          setComponents(prev => prev.filter(c => c.id !== selectedId));
+          setConnections(prev => prev.filter(c => c.sourceId !== selectedId && c.targetId !== selectedId));
+          setSelectedId(null);
+        } else if (selectedIds.length > 0) {
+          e.preventDefault();
+          onSnapshot(); // Save state before delete
+          setComponents(prev => prev.filter(c => !selectedIds.includes(c.id)));
+          setConnections(prev => prev.filter(c => !selectedIds.includes(c.sourceId) && !selectedIds.includes(c.targetId)));
+          setSelectedIds([]);
+        }
+      }
+
+      // Bring to front: Ctrl/Cmd + ]
+      if ((e.metaKey || e.ctrlKey) && e.key === ']' && selectedId) {
+        e.preventDefault();
+        onSnapshot();
+        const maxZ = Math.max(...components.map(c => c.zOrder || 0), 0);
+        setComponents(prev => prev.map(c =>
+          c.id === selectedId ? { ...c, zOrder: maxZ + 1 } : c
+        ));
+      }
+
+      // Send to back: Ctrl/Cmd + [
+      if ((e.metaKey || e.ctrlKey) && e.key === '[' && selectedId) {
+        e.preventDefault();
+        onSnapshot();
+        const minZ = Math.min(...components.map(c => c.zOrder || 0), 0);
+        setComponents(prev => prev.map(c =>
+          c.id === selectedId ? { ...c, zOrder: minZ - 1 } : c
+        ));
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, setComponents, setConnections, onSnapshot]);
+  }, [selectedId, components, setComponents, setConnections, onSnapshot]);
 
   const getDimensions = (comp: SystemComponent) => {
     // If custom width/height set by resize, use them
@@ -196,17 +230,27 @@ const Canvas: React.FC<CanvasProps> = ({
     const isMiddleClick = e.button === 1;
     const isSpaceDown = e.getModifierState("Space");
 
-    if (isMiddleClick || (isLeftClick && isSpaceDown) || (isLeftClick && activeTool === 'select')) {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const x = (e.clientX - rect.left - viewState.x) / viewState.zoom;
+    const y = (e.clientY - rect.top - viewState.y) / viewState.zoom;
+
+    // Panning with middle mouse or space+drag
+    if (isMiddleClick || (isLeftClick && isSpaceDown)) {
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY });
       return;
     }
 
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const x = (e.clientX - rect.left - viewState.x) / viewState.zoom;
-    const y = (e.clientY - rect.top - viewState.y) / viewState.zoom;
+    // Start marquee selection with select tool
+    if (isLeftClick && activeTool === 'select') {
+      setMarqueeStart({ x, y });
+      setMarqueeEnd({ x, y });
+      setSelectedId(null);
+      setSelectedIds([]);
+      return;
+    }
 
     // Creation Tools
     if (['text', 'rect', 'circle', 'pen'].includes(activeTool)) {
@@ -325,8 +369,13 @@ const Canvas: React.FC<CanvasProps> = ({
           if (activeTool === 'connect_line') type = 'undirected';
           if (activeTool === 'connect_loop') type = 'loop';
 
-          // Force Green for directed arrows, else use selected color
-          const connectionColor = type === 'directed' ? '#22c55e' : selectedColor;
+          // Set default colors: black for arrows, yellow for loops, selected color for others
+          let connectionColor = selectedColor;
+          if (type === 'directed' && activeTool === 'connect_arrow') {
+            connectionColor = '#000000'; // Black for arrows
+          } else if (type === 'loop') {
+            connectionColor = '#eab308'; // Yellow for loops
+          }
 
           const newConnection: Connection = {
             id: `c-${Date.now()}`,
@@ -449,6 +498,36 @@ const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
+    // Marquee Selection
+    if (marqueeStart) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const x = (e.clientX - rect.left - viewState.x) / viewState.zoom;
+        const y = (e.clientY - rect.top - viewState.y) / viewState.zoom;
+        setMarqueeEnd({ x, y });
+
+        // Calculate which components are within the marquee
+        const minX = Math.min(marqueeStart.x, x);
+        const maxX = Math.max(marqueeStart.x, x);
+        const minY = Math.min(marqueeStart.y, y);
+        const maxY = Math.max(marqueeStart.y, y);
+
+        const selected = components.filter(comp => {
+          const dims = getDimensions(comp);
+          const compMinX = comp.x;
+          const compMaxX = comp.x + dims.w;
+          const compMinY = comp.y;
+          const compMaxY = comp.y + dims.h;
+
+          // Check if component overlaps with marquee
+          return !(compMaxX < minX || compMinX > maxX || compMaxY < minY || compMinY > maxY);
+        }).map(c => c.id);
+
+        setSelectedIds(selected);
+      }
+      return;
+    }
+
     // Panning
     if (isPanning) {
       const dx = e.clientX - panStart.x;
@@ -475,6 +554,13 @@ const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseUp = () => {
+    // Finalize marquee selection
+    if (marqueeStart) {
+      setMarqueeStart(null);
+      setMarqueeEnd(null);
+      // selectedIds is already set from mouse move
+    }
+
     setDraggedComponent(null);
     setResizing(null);
     setIsPanning(false);
@@ -496,12 +582,32 @@ const Canvas: React.FC<CanvasProps> = ({
     setComponents(prev => prev.map(c => c.id === id ? { ...c, customLabel: newLabel } : c));
   };
 
+  const handleBringToFront = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSnapshot();
+    setComponents(prev => {
+      const maxZ = Math.max(...prev.map(c => c.zOrder || 0), 0);
+      return prev.map(c => c.id === id ? { ...c, zOrder: maxZ + 1 } : c);
+    });
+  };
+
+  const handleSendToBack = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSnapshot();
+    setComponents(prev => {
+      const minZ = Math.min(...prev.map(c => c.zOrder || 0), 0);
+      return prev.map(c => c.id === id ? { ...c, zOrder: minZ - 1 } : c);
+    });
+  };
+
   const getCursorClass = () => {
-    if (resizing) return 'cursor-nwse-resize'; 
+    if (resizing) return 'cursor-nwse-resize';
     if (isPanning) return 'cursor-grabbing';
+    if (draggedComponent) return 'cursor-grabbing';
+    if (activeTool === 'select' && hoveredId) return 'cursor-grab';
     if (activeTool === 'select') return 'cursor-default';
     if (activeTool === 'text') return 'cursor-text';
-    if (activeTool === 'pen') return 'cursor-crosshair'; // Should be pencil like?
+    if (activeTool === 'pen') return 'cursor-crosshair';
     if (activeTool.startsWith('connect_')) return 'cursor-crosshair';
     return 'cursor-crosshair';
   };
@@ -512,23 +618,20 @@ const Canvas: React.FC<CanvasProps> = ({
     connections.forEach(c => {
       if (c.color) colors.add(c.color);
     });
-    // Add default green for arrow tool dragging
-    colors.add('#22c55e');
-    // Add selected color for line tool dragging
-    colors.add(selectedColor);
+    // Add default colors for connectors
+    colors.add('#000000'); // Black for arrows
+    colors.add('#eab308'); // Yellow for loops
+    colors.add(selectedColor); // Current selected color
     return Array.from(colors);
   }, [connections, selectedColor]);
 
   const getMarkerId = (color: string) => `arrowhead-${color.replace('#', '')}`;
 
   return (
-    <div 
+    <div
       ref={canvasRef}
-      className={`flex-1 relative bg-white overflow-hidden ${getCursorClass()} bg-cross-pattern`}
-      style={{
-        backgroundPosition: `${viewState.x}px ${viewState.y}px`,
-        backgroundSize: `${20 * viewState.zoom}px ${20 * viewState.zoom}px`
-      }}
+      className={`flex-1 relative bg-slate-50 overflow-hidden ${getCursorClass()}`}
+      style={{}}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onMouseDown={handleCanvasMouseDown}
@@ -568,10 +671,10 @@ const Canvas: React.FC<CanvasProps> = ({
                 y1={getIntersection(connectingSourceId, tempConnectionTarget).y + 5000}
                 x2={tempConnectionTarget.x + 5000}
                 y2={tempConnectionTarget.y + 5000}
-                stroke={activeTool === 'connect_arrow' ? '#22c55e' : selectedColor}
+                stroke={activeTool === 'connect_arrow' ? '#000000' : (activeTool === 'connect_loop' ? '#eab308' : selectedColor)}
                 strokeWidth="2"
                 strokeDasharray="5,5"
-                markerEnd={activeTool === 'connect_arrow' ? `url(#${getMarkerId('#22c55e')})` : undefined}
+                markerEnd={activeTool === 'connect_arrow' ? `url(#${getMarkerId('#000000')})` : undefined}
                 className="opacity-60"
              />
           )}
@@ -713,8 +816,8 @@ const Canvas: React.FC<CanvasProps> = ({
         </svg>
 
         {/* Components */}
-        {components.map((comp) => {
-          const isSelected = selectedId === comp.id;
+        {[...components].sort((a, b) => (a.zOrder || 0) - (b.zOrder || 0)).map((comp) => {
+          const isSelected = selectedId === comp.id || selectedIds.includes(comp.id);
           const isSource = connectingSourceId === comp.id;
           const dims = getDimensions(comp);
           const spec = COMPONENT_SPECS[comp.type];
@@ -729,18 +832,42 @@ const Canvas: React.FC<CanvasProps> = ({
           const isCircle = comp.type === ComponentType.ANNOTATION_CIRCLE;
           const isDraw = comp.type === ComponentType.ANNOTATION_DRAW;
           
+          // Build hierarchy breadcrumb
           let displayName = comp.tool || comp.customLabel || comp.label;
-          if (!displayName && !isText) {
+          let hierarchyParts: string[] = [];
+
+          if (!isText) {
             const subType = spec?.subTypes?.find(s => s.id === comp.subType);
-            displayName = subType?.label || spec?.label || 'Unknown';
+
+            if (!displayName) {
+              displayName = subType?.label || spec?.label || 'Unknown';
+            }
+
+            // Build breadcrumb from most specific to least specific
+            if (comp.tool && subType) {
+              // Tool level: show subType → category → spec
+              hierarchyParts.push(subType.label);
+              if (subType.category) hierarchyParts.push(subType.category);
+              if (spec?.label) hierarchyParts.push(spec.label);
+            } else if (comp.subType && subType) {
+              // SubType level: show category → spec
+              if (subType.category) hierarchyParts.push(subType.category);
+              if (spec?.label) hierarchyParts.push(spec.label);
+            } else if (displayName === subType?.category && spec?.label) {
+              // Category level: show only spec
+              hierarchyParts.push(spec.label);
+            } else if (comp.label && !comp.subType && spec?.label && displayName !== spec.label) {
+              // Generic component with just a label: show spec if different
+              hierarchyParts.push(spec.label);
+            }
+            // If only spec level, no breadcrumb needed
           }
-          
-          let typeName = spec?.label;
-          const showTypeName = !isStart && !isEnd && !isDecision && !isText && !isRect && !isCircle && !isDraw && typeName && displayName !== typeName;
+
+          const showHierarchy = hierarchyParts.length > 0 && !isStart && !isEnd && !isDecision && !isText && !isRect && !isCircle && !isDraw;
 
           let baseClasses = "absolute flex flex-col items-center justify-center select-none transition-all shadow-lg";
           let shapeStyles: React.CSSProperties = {
-            borderColor: comp.color, 
+            backgroundColor: comp.color || '#1e3a8a',
           };
 
           // Special rendering for drawings
@@ -760,6 +887,8 @@ const Canvas: React.FC<CanvasProps> = ({
                  onMouseDown={(e) => handleMouseDownComponent(e, comp.id)}
                  onMouseUp={(e) => handleMouseUpComponent(e, comp.id)}
                  onClick={(e) => handleComponentClick(comp.id, e)}
+                 onMouseEnter={() => setHoveredId(comp.id)}
+                 onMouseLeave={() => setHoveredId(null)}
                >
                  <svg className="overflow-visible pointer-events-none">
                     <polyline 
@@ -793,67 +922,76 @@ const Canvas: React.FC<CanvasProps> = ({
           }
 
           if (isLayer) {
-            baseClasses += " border-2 border-dashed bg-slate-900/50 text-left items-start justify-start p-2 rounded-lg";
+            baseClasses += " border-2 border-dashed border-slate-600 text-left items-start justify-start p-2 rounded-lg z-0";
+            shapeStyles = {
+              backgroundColor: 'transparent',
+              borderColor: comp.color || '#64748b'
+            };
           } else if (isStart || isEnd) {
-            baseClasses += " rounded-full border-4";
+            baseClasses += " rounded-full border-2 border-slate-700";
           } else if (isDecision || isData) {
             baseClasses += " z-20";
           } else if (isText) {
-            baseClasses = "absolute flex items-center justify-center z-30 min-w-[100px] p-1";
-            shapeStyles.color = comp.color || '#475569'; 
+            baseClasses = "absolute flex items-center justify-center z-30 min-w-[100px] p-2 border-2 border-black rounded";
+            shapeStyles = { backgroundColor: 'transparent' };
           } else if (isRect) {
-            baseClasses += " border-2 rounded-lg bg-slate-200/20 backdrop-blur-sm z-10";
+            baseClasses += " border-2 rounded-lg z-10";
+            shapeStyles = {
+              backgroundColor: 'transparent',
+              borderColor: comp.color || '#64748b'
+            };
           } else if (isCircle) {
-            baseClasses += " border-2 rounded-full bg-slate-200/20 backdrop-blur-sm z-10";
+            baseClasses += " border-2 rounded-full z-10";
+            shapeStyles = {
+              backgroundColor: 'transparent',
+              borderColor: comp.color || '#64748b'
+            };
           } else {
-            baseClasses += " rounded-lg border-2 p-2";
+            baseClasses += " rounded-lg border-2 border-slate-700 p-2";
           }
           
           let colorClasses = "";
           const isStandardNode = !isLayer && !isText && !isRect && !isCircle && !isDecision && !isData;
 
           if (isSelected) {
-            colorClasses = "border-blue-500 ring-2 ring-blue-500/50 z-30 shadow-blue-500/20";
-            if (isStandardNode) colorClasses += " bg-slate-900";
+            if (isLayer) {
+              colorClasses = "border-blue-500 ring-2 ring-blue-500/50 z-0 shadow-blue-500/20";
+            } else {
+              colorClasses = "border-blue-500 ring-2 ring-blue-500/50 z-30 shadow-blue-500/20";
+            }
           } else if (isSource) {
             colorClasses = "border-blue-400 ring-2 ring-blue-400 z-30 animate-pulse";
-            if (isStandardNode) colorClasses += " bg-slate-900";
           } else {
-            if (!comp.color) {
-              if (isLayer) colorClasses = "border-slate-300 hover:border-slate-400 z-0";
-              else if (isStart) colorClasses = "border-green-600 bg-slate-900 hover:border-green-400 z-20";
-              else if (isEnd) colorClasses = "border-red-600 bg-slate-900 hover:border-red-400 z-20";
-              else if (isStandardNode) colorClasses = "border-slate-700 bg-slate-900 hover:border-slate-500 z-20";
-            } else {
-              colorClasses = "bg-slate-900 z-20";
-              if (isRect || isCircle) colorClasses = "z-10";
-            }
+            if (isLayer) colorClasses = "border-slate-600 hover:border-slate-400 z-0";
+            else if (isRect || isCircle) colorClasses = "z-10";
+            else colorClasses = "z-20";
           }
 
           const renderContent = () => {
             if (isText) {
               return (
-                <input 
+                <textarea
                   autoFocus={!comp.customLabel}
-                  value={comp.customLabel || comp.label}
+                  value={comp.customLabel || ''}
+                  placeholder="Text"
                   onChange={(e) => handleLabelChange(comp.id, e.target.value)}
-                  className="bg-transparent border-none text-center focus:outline-none w-full h-full font-bold text-lg"
-                  style={{ color: comp.color || '#475569' }}
+                  className="bg-transparent border-none text-center focus:outline-none w-full h-full font-bold text-lg text-black resize-none overflow-hidden placeholder:text-gray-400"
                   onKeyDown={(e) => { e.stopPropagation(); }}
+                  style={{ minHeight: '24px' }}
                 />
               );
             }
             return (
               <>
-                <div className={`mb-1 ${isSelected ? 'text-blue-400' : (isStart ? 'text-green-500' : (isEnd ? 'text-red-500' : 'text-slate-400'))}`} style={comp.color ? { color: comp.color } : {}}>
+                <div className="mb-1 text-white">
                     {getIconForType(comp.type)}
                   </div>
-                  <div className="text-xs font-bold text-center text-slate-200 truncate w-full px-1" title={displayName}>
+                  <div className="text-xs font-bold text-center text-white truncate w-full px-1" title={displayName}>
                     {displayName}
                   </div>
-                  {showTypeName && (
-                    <div className="text-[9px] text-center text-slate-500 truncate w-full px-1">
-                      {typeName}
+                  {showHierarchy && (
+                    <div className="text-[9px] text-center text-white/70 w-full px-1 leading-tight">
+                      {hierarchyParts.join(' → ')}
                     </div>
                   )}
               </>
@@ -873,18 +1011,38 @@ const Canvas: React.FC<CanvasProps> = ({
               onMouseDown={(e) => handleMouseDownComponent(e, comp.id)}
               onMouseUp={(e) => handleMouseUpComponent(e, comp.id)}
               onClick={(e) => handleComponentClick(comp.id, e)}
+              onMouseEnter={() => setHoveredId(comp.id)}
+              onMouseLeave={() => setHoveredId(null)}
             >
               {isSelected && (
                 <>
-                  <button
-                    onClick={(e) => handleDelete(comp.id, e)}
-                    className="absolute -top-5 left-1/2 -translate-x-1/2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform"
-                  >
-                    <X size={12} />
-                  </button>
+                  {/* Action Buttons */}
+                  <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex gap-1">
+                    <button
+                      onClick={(e) => handleBringToFront(comp.id, e)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform"
+                      title="Bring to Front"
+                    >
+                      <ArrowUp size={12} />
+                    </button>
+                    <button
+                      onClick={(e) => handleSendToBack(comp.id, e)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform"
+                      title="Send to Back"
+                    >
+                      <ArrowDown size={12} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(comp.id, e)}
+                      className="bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform"
+                      title="Delete"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
 
-                  {/* Resize Handles - Only show for resizable shapes */}
-                  {(isRect || isCircle || isLayer) && (
+                  {/* Resize Handles - Show for all components except flow items and drawings */}
+                  {!isStart && !isEnd && !isDecision && !isData && !isDraw && (
                     <>
                       {/* NW */}
                       <div 
@@ -912,20 +1070,20 @@ const Canvas: React.FC<CanvasProps> = ({
               )}
 
               {isDecision ? (
-                <div className={`w-full h-full transform rotate-45 border-2 bg-slate-900 flex items-center justify-center ${isSelected ? 'border-blue-500' : 'hover:border-slate-500'}`} style={{ borderColor: comp.color || (isSelected ? undefined : '#ca8a04') }}>
+                <div className={`w-full h-full transform rotate-45 border-2 border-slate-700 flex items-center justify-center ${isSelected ? 'ring-2 ring-blue-500/50' : ''}`} style={{ backgroundColor: comp.color || '#ca8a04' }}>
                   <div className="transform -rotate-45 flex flex-col items-center w-full">
                       {renderContent()}
                   </div>
                 </div>
               ) : isData ? (
-                <div className={`w-full h-full transform -skew-x-12 border-2 bg-slate-900 flex items-center justify-center ${isSelected ? 'border-blue-500' : 'hover:border-slate-500'}`} style={{ borderColor: comp.color || (isSelected ? undefined : '#9333ea') }}>
+                <div className={`w-full h-full transform -skew-x-12 border-2 border-slate-700 flex items-center justify-center ${isSelected ? 'ring-2 ring-blue-500/50' : ''}`} style={{ backgroundColor: comp.color || '#9333ea' }}>
                     <div className="transform skew-x-12 flex flex-col items-center w-full px-4">
                       {renderContent()}
                     </div>
                 </div>
               ) : isLayer ? (
                 <div className="w-full h-full relative">
-                  <div className="flex items-center gap-2 text-slate-500 mb-2">
+                  <div className="flex items-center gap-2 text-white mb-2">
                     {getIconForType(comp.type)}
                     <span className="text-xs font-bold uppercase tracking-widest">{displayName}</span>
                   </div>
@@ -936,6 +1094,23 @@ const Canvas: React.FC<CanvasProps> = ({
             </div>
           );
         })}
+
+        {/* Marquee Selection Box */}
+        {marqueeStart && marqueeEnd && (
+          <div
+            style={{
+              position: 'absolute',
+              left: Math.min(marqueeStart.x, marqueeEnd.x),
+              top: Math.min(marqueeStart.y, marqueeEnd.y),
+              width: Math.abs(marqueeEnd.x - marqueeStart.x),
+              height: Math.abs(marqueeEnd.y - marqueeStart.y),
+              border: '2px dashed #3b82f6',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              pointerEvents: 'none',
+              zIndex: 1000
+            }}
+          />
+        )}
       </div>
     </div>
   );

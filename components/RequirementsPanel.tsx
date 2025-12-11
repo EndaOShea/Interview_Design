@@ -11,13 +11,13 @@ const RequirementsPanel: React.FC<RequirementsPanelProps> = ({ challenge }) => {
 
   return (
     <div className="absolute top-4 right-4 z-10 flex flex-col items-end">
-      <div 
-        className={`bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg shadow-xl transition-all duration-300 ease-in-out overflow-hidden ${
-          isCollapsed ? 'w-48' : 'w-72 max-h-[60vh]'
+      <div
+        className={`bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg shadow-xl transition-all duration-300 ease-in-out overflow-hidden flex flex-col ${
+          isCollapsed ? 'w-48' : 'w-80 sm:w-96 h-[500px] max-h-[80vh]'
         }`}
       >
         {/* Header */}
-        <div 
+        <div
           className="flex items-center justify-between p-3 bg-slate-800/50 cursor-pointer border-b border-transparent hover:border-slate-700 transition-colors"
           onClick={() => setIsCollapsed(!isCollapsed)}
         >
@@ -34,7 +34,7 @@ const RequirementsPanel: React.FC<RequirementsPanelProps> = ({ challenge }) => {
 
         {/* Content */}
         {!isCollapsed && (
-          <div className="p-4 overflow-y-auto custom-scrollbar max-h-[50vh]">
+          <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
             <div className="mb-4">
                <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
                  Functional

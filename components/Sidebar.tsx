@@ -15,15 +15,8 @@ const Sidebar: React.FC = () => {
   const [newToolName, setNewToolName] = useState('');
   const [newToolType, setNewToolType] = useState<string>('');
   
-  // Store colors for every configurable item
-  // Keys: ComponentType (for flow/layers), SubTypeId (for specific items), or custom-{idx}
-  const [itemColors, setItemColors] = useState<Record<string, string>>({});
-
-  const getColor = (key: string) => itemColors[key] || DEFAULT_NAVY;
-
-  const handleColorChange = (key: string, color: string) => {
-    setItemColors(prev => ({ ...prev, [key]: color }));
-  };
+  // Single global color for all components
+  const [globalColor, setGlobalColor] = useState(DEFAULT_NAVY);
   
   // State for expanded layers (Level 1)
   const [expandedLayers, setExpandedLayers] = useState<Record<string, boolean>>({});
@@ -33,9 +26,9 @@ const Sidebar: React.FC = () => {
   };
 
   const handleDragStart = (
-    e: React.DragEvent, 
-    type: ComponentType, 
-    label?: string, 
+    e: React.DragEvent,
+    type: ComponentType,
+    label?: string,
     subTypeId?: string,
     customKey?: string
   ) => {
@@ -46,12 +39,10 @@ const Sidebar: React.FC = () => {
     if (subTypeId) {
       e.dataTransfer.setData('application/reactflow-subtype', subTypeId);
     }
-    
-    // Determine which color to send
-    const key = customKey || subTypeId || type;
-    const color = getColor(key);
-    e.dataTransfer.setData('application/reactflow-color', color);
-    
+
+    // Use global color for all components
+    e.dataTransfer.setData('application/reactflow-color', globalColor);
+
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -92,24 +83,6 @@ const Sidebar: React.FC = () => {
     ComponentType.STRUCTURE_LAYER
   ];
 
-  // Helper for color picker
-  const ColorPicker = ({ id }: { id: string }) => (
-    <div className="relative group/picker" onClick={(e) => e.stopPropagation()}>
-      <label 
-        htmlFor={`color-${id}`}
-        className="block w-3 h-3 rounded-full cursor-pointer border border-slate-500 hover:border-white shadow-sm transition-transform hover:scale-125"
-        style={{ backgroundColor: getColor(id) }}
-        title="Set Default Color"
-      />
-      <input
-        id={`color-${id}`}
-        type="color"
-        value={getColor(id)}
-        onChange={(e) => handleColorChange(id, e.target.value)}
-        className="absolute opacity-0 w-0 h-0 pointer-events-none"
-      />
-    </div>
-  );
 
   return (
     <div className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col h-full shrink-0 z-10 shadow-xl overflow-hidden">
@@ -123,7 +96,62 @@ const Sidebar: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="p-2 space-y-4">
-          
+
+          {/* Global Color Picker */}
+          <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg p-3 border border-blue-800/30">
+            <h2 className="text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-wider">Component Color</h2>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={globalColor}
+                onChange={(e) => setGlobalColor(e.target.value)}
+                className="w-10 h-10 rounded-lg cursor-pointer border-2 border-slate-700 hover:border-blue-500 transition-colors"
+                style={{
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  backgroundColor: globalColor
+                }}
+                title="Choose component color"
+              />
+              <div className="flex-1">
+                <div className="text-xs text-slate-300 font-medium mb-1">Active Color</div>
+                <input
+                  type="text"
+                  value={globalColor}
+                  onChange={(e) => setGlobalColor(e.target.value)}
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                  placeholder="#1e3a8a"
+                />
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] text-slate-500">
+              New components will use this color
+            </div>
+          </div>
+
+          {/* Annotations */}
+          <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-800">
+            <h2 className="text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-wider">Annotations</h2>
+            <div className="grid grid-cols-3 gap-2">
+               {[ComponentType.ANNOTATION_TEXT, ComponentType.ANNOTATION_RECT, ComponentType.ANNOTATION_CIRCLE].map(type => {
+                 const spec = COMPONENT_SPECS[type];
+                 return (
+                   <div
+                      key={type}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, type, spec.label)}
+                      className="relative flex flex-col items-center justify-center p-2 bg-slate-800 rounded border border-slate-700 hover:border-blue-500 cursor-grab transition-colors gap-1 group"
+                      title={spec.label}
+                   >
+                      <div className="text-purple-400 text-sm">{spec.icon}</div>
+                      <span className="text-[9px] text-slate-300 text-center leading-tight">{spec.label}</span>
+                      <GripVertical size={10} className="absolute top-0.5 right-0.5 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                   </div>
+                 );
+               })}
+            </div>
+          </div>
+
           {/* Quick Flow Tools */}
           <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-800">
             <h2 className="text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-wider">Logic & Flow</h2>
@@ -131,16 +159,13 @@ const Sidebar: React.FC = () => {
                {flowTools.map(type => {
                  const spec = COMPONENT_SPECS[type];
                  return (
-                   <div 
+                   <div
                       key={type}
                       draggable
                       onDragStart={(e) => handleDragStart(e, type, spec.label)}
                       className="relative flex flex-col items-center justify-center p-2 bg-slate-800 rounded border border-slate-700 hover:border-blue-500 cursor-grab transition-colors gap-1 group"
                       title={spec.label}
                    >
-                     <div className="absolute top-1 right-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ColorPicker id={type} />
-                     </div>
                      <div className="text-slate-400 mt-1">{spec.icon}</div>
                      <span className="text-[9px] text-slate-300 truncate w-full text-center">{spec.label}</span>
                    </div>
@@ -176,9 +201,6 @@ const Sidebar: React.FC = () => {
                     </button>
                     <div className="text-blue-400">{spec.icon}</div>
                     <span className="text-sm font-semibold text-slate-200 flex-1 truncate">{spec.label}</span>
-                    <div className="opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity mr-2">
-                       <ColorPicker id={spec.type} />
-                    </div>
                     <GripVertical size={12} className="text-slate-600 opacity-50" />
                   </div>
 
@@ -208,16 +230,7 @@ const Sidebar: React.FC = () => {
                                 onDragStart={(e) => handleDragStart(e, spec.type, undefined, sub.id)}
                                 className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-800 cursor-grab group transition-colors"
                               >
-                                <div className="flex items-center gap-2">
-                                  <div 
-                                    className="w-1.5 h-1.5 rounded-full transition-colors" 
-                                    style={{ backgroundColor: getColor(sub.id) }}
-                                  ></div>
-                                  <span className="text-xs text-slate-400 group-hover:text-slate-100 transition-colors">{sub.label}</span>
-                                </div>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <ColorPicker id={sub.id} />
-                                </div>
+                                <span className="text-xs text-slate-400 group-hover:text-slate-100 transition-colors">{sub.label}</span>
                               </div>
                             ))}
                           </div>
@@ -281,9 +294,6 @@ const Sidebar: React.FC = () => {
                       <span className="text-xs text-slate-300 truncate max-w-[100px]" title={tool.name}>{tool.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ColorPicker id={customId} />
-                      </div>
                       <button 
                         onClick={() => removeCustomTool(idx)}
                         className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"

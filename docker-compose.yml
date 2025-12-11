@@ -1,0 +1,26 @@
+services:
+  architectai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GEMINI_API_KEY: ${GEMINI_API_KEY}
+    container_name: architectai-system-design
+    ports:
+      - "2350:2350"
+    environment:
+      # Pass Gemini API key from host environment or .env file
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: unless-stopped
+    networks:
+      - architectai-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2350/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  architectai-network:
+    driver: bridge
