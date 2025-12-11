@@ -20,8 +20,8 @@ interface CanvasProps {
   onSnapshot: () => void;
 }
 
-const COMPONENT_WIDTH = 140;
-const COMPONENT_HEIGHT = 80;
+const COMPONENT_WIDTH = 280;
+const COMPONENT_HEIGHT = 160;
 
 const Canvas: React.FC<CanvasProps> = ({
   components,
@@ -125,14 +125,14 @@ const Canvas: React.FC<CanvasProps> = ({
     if (comp.width && comp.height) return { w: comp.width, h: comp.height };
 
     const { type } = comp;
-    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) return { w: 60, h: 60 };
-    if (type === ComponentType.FLOW_DECISION) return { w: 100, h: 100 };
-    if (type === ComponentType.STRUCTURE_LAYER) return { w: 400, h: 250 };
-    if (type === ComponentType.ANNOTATION_RECT) return { w: 200, h: 150 };
-    if (type === ComponentType.ANNOTATION_CIRCLE) return { w: 150, h: 150 };
-    if (type === ComponentType.ANNOTATION_TEXT) return { w: 120, h: 40 }; 
+    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) return { w: 120, h: 120 };
+    if (type === ComponentType.FLOW_DECISION) return { w: 200, h: 200 };
+    if (type === ComponentType.STRUCTURE_LAYER) return { w: 800, h: 500 };
+    if (type === ComponentType.ANNOTATION_RECT) return { w: 400, h: 300 };
+    if (type === ComponentType.ANNOTATION_CIRCLE) return { w: 300, h: 300 };
+    if (type === ComponentType.ANNOTATION_TEXT) return { w: 240, h: 80 };
     // Freehand drawing defaults mostly irrelevant as we rely on points bounding box conceptually, but needed for selection
-    if (type === ComponentType.ANNOTATION_DRAW) return { w: 100, h: 100 }; 
+    if (type === ComponentType.ANNOTATION_DRAW) return { w: 200, h: 200 };
     return { w: COMPONENT_WIDTH, h: COMPONENT_HEIGHT };
   };
 
@@ -261,7 +261,7 @@ const Canvas: React.FC<CanvasProps> = ({
       const newComp: SystemComponent = {
         id: `text-${Date.now()}`,
         type: ComponentType.ANNOTATION_TEXT,
-        x: x - 50, y: y - 15,
+        x: x - 120, y: y - 40,
         label: 'Text',
         color: selectedColor
       };
@@ -274,7 +274,7 @@ const Canvas: React.FC<CanvasProps> = ({
       const newComp: SystemComponent = {
         id: `rect-${Date.now()}`,
         type: ComponentType.ANNOTATION_RECT,
-        x: x - 100, y: y - 75,
+        x: x - 200, y: y - 150,
         label: '',
         color: selectedColor
       };
@@ -287,7 +287,7 @@ const Canvas: React.FC<CanvasProps> = ({
        const newComp: SystemComponent = {
         id: `circ-${Date.now()}`,
         type: ComponentType.ANNOTATION_CIRCLE,
-        x: x - 75, y: y - 75,
+        x: x - 150, y: y - 150,
         label: '',
         color: selectedColor
       };
@@ -983,14 +983,14 @@ const Canvas: React.FC<CanvasProps> = ({
             }
             return (
               <>
-                <div className="mb-1 text-white">
+                <div className={`mb-1 ${isLayer ? 'text-black' : 'text-white'}`} style={{ transform: 'scale(0.75)' }}>
                     {getIconForType(comp.type)}
                   </div>
-                  <div className="text-xs font-bold text-center text-white truncate w-full px-1" title={displayName}>
+                  <div className={`text-xs font-bold text-center truncate w-full px-1 ${isLayer ? 'text-black' : 'text-white'}`} title={displayName}>
                     {displayName}
                   </div>
                   {showHierarchy && (
-                    <div className="text-[9px] text-center text-white/70 w-full px-1 leading-tight">
+                    <div className={`text-[9px] text-center w-full px-1 leading-tight ${isLayer ? 'text-black/70' : 'text-white/70'}`}>
                       {hierarchyParts.join(' → ')}
                     </div>
                   )}

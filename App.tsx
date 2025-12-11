@@ -116,8 +116,8 @@ const App: React.FC = () => {
     const draft = {
       id: `node-${Date.now()}`,
       type,
-      x: worldX - 70, // Center approx component width
-      y: worldY - 40, // Center approx component height
+      x: worldX - 140, // Center approx component width (doubled)
+      y: worldY - 80, // Center approx component height (doubled)
       label: label,
       customLabel: customLabel || undefined,
       subType: subTypeId || undefined,
