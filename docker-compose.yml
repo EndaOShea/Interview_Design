@@ -3,13 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        GEMINI_API_KEY: ${GEMINI_API_KEY}
+      # No build args needed - API key loaded at runtime
     container_name: architectai-system-design
     ports:
       - "2350:2350"
     environment:
-      # Pass Gemini API key from host environment or .env file
+      # Runtime environment variable - NOT baked into image
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     restart: unless-stopped
     networks:

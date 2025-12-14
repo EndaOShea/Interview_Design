@@ -1,8 +1,18 @@
 import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
 import { Challenge, EvaluationResult, SystemComponent, Connection, HintResult } from "../types";
 
-// Initialize Gemini Client for default app actions (using env key)
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Get API key from runtime config (Docker) or build-time env (development)
+const getApiKey = (): string => {
+  // First try runtime config (Docker production)
+  if (typeof window !== 'undefined' && (window as any).ENV?.GEMINI_API_KEY) {
+    return (window as any).ENV.GEMINI_API_KEY;
+  }
+  // Fallback to build-time env (local development)
+  return process.env.API_KEY || '';
+};
+
+// Initialize Gemini Client for default app actions
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 const challengeSchema: Schema = {
   type: Type.OBJECT,
@@ -57,9 +67,9 @@ const hintSchema: Schema = {
 
 export const generateChallenge = async (topic?: string): Promise<Challenge> => {
   try {
-    const prompt = topic 
-      ? `Generate a system design interview challenge about: ${topic}. Focus on modern distributed systems.`
-      : "Generate a random, modern system design interview challenge (e.g., social media, ride-sharing, e-commerce, streaming, fintech).";
+    const prompt = topic
+      ? `Generate a system design interview challenge about: ${topic}. Focus on modern distributed systems. Include cost/budget considerations.`
+      : "Generate a random, modern system design interview challenge (e.g., social media, ride-sharing, e-commerce, streaming, fintech). Include cost/budget considerations.";
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -67,7 +77,7 @@ export const generateChallenge = async (topic?: string): Promise<Challenge> => {
       config: {
         responseMimeType: "application/json",
         responseSchema: challengeSchema,
-        systemInstruction: "You are a Principal Software Engineer at a FAANG company designing interview questions. Be specific about scale (DAU, RPM) and latency requirements."
+        systemInstruction: "You are a Principal Software Engineer at a FAANG company designing interview questions. Be specific about scale (DAU, RPM), latency requirements, and cost constraints. Always include at least one cost-related constraint (e.g., 'Optimize for cost efficiency', 'Budget: $X/month', 'Minimize infrastructure costs')."
       }
     });
 
@@ -95,12 +105,13 @@ export const generateHints = async (challenge: Challenge): Promise<HintResult> =
       TITLE: ${challenge.title}
       DESCRIPTION: ${challenge.description}
       REQUIREMENTS: ${challenge.requirements.join(', ')}
-      
+      CONSTRAINTS: ${challenge.constraints.join(', ')}
+
       I am stuck and need a "Starter Kit" or hints to get going.
-      
+
       1. List the essential components I should probably drag onto the canvas to satisfy the requirements (e.g., Load Balancer, Cache, Database type, etc.).
       2. Provide a 2-3 sentence high-level strategy on how to connect them (e.g., "Start with the client, put a load balancer in front of stateless services...").
-      3. List 2-3 key technical "gotchas" or considerations for this specific problem.
+      3. List 2-3 key technical "gotchas" or considerations for this specific problem, INCLUDING cost optimization opportunities.
 
       Return the response in JSON format.
     `;
@@ -111,7 +122,7 @@ export const generateHints = async (challenge: Challenge): Promise<HintResult> =
       config: {
         responseMimeType: "application/json",
         responseSchema: hintSchema,
-        systemInstruction: "You are a helpful mentor guiding a student. Do not give the full answer code, just architectural building blocks and high-level strategy."
+        systemInstruction: "You are a helpful mentor guiding a student. Do not give the full answer code, just architectural building blocks and high-level strategy. Include cost-conscious recommendations - mention when cheaper alternatives exist or when cost optimization techniques (caching, CDN, etc.) should be considered."
       }
     });
 
@@ -150,7 +161,7 @@ export const evaluateDesign = async (
 
     const prompt = `
       Evaluate this system design (or flowchart) solution for the following challenge:
-      
+
       CHALLENGE: ${challenge.title}
       DESCRIPTION: ${challenge.description}
       REQUIREMENTS: ${challenge.requirements.join(', ')}
@@ -160,14 +171,20 @@ export const evaluateDesign = async (
       ${designJson}
 
       The design components use a 16-layer classification system (e.g., 1. Clients, 4. Storage, 12. Scalability).
-      
-      Provide a critical architectural review. 
-      If it is a High Level Design, analyze availability, scalability, latency, and consistency.
+
+      Provide a critical architectural review.
+      If it is a High Level Design, analyze availability, scalability, latency, consistency, and COST EFFICIENCY.
       If it is a Flowchart/Logic design, analyze the logic flow, edge cases, and error handling.
-      
+
       Analyze the user's choice of specific tools (e.g., Redis vs Memcached, Postgres vs Mongo) if provided.
-      Analyze for Single Points of Failure, Scalability bottlenecks, Security flaws, and Data consistency issues.
-      
+      Evaluate cost trade-offs:
+      - Are they using expensive services where cheaper alternatives exist?
+      - Are they over-engineering for the given scale?
+      - Are they missing cost optimization opportunities (caching, CDN, etc.)?
+      - Consider managed vs self-hosted costs for their scale
+
+      Analyze for Single Points of Failure, Scalability bottlenecks, Security flaws, Data consistency issues, and COST INEFFICIENCIES.
+
       Note: Users may use "Generic" layers or categories if they haven't selected specific tools. Criticize if specificity is required for the challenge level.
     `;
 
@@ -177,7 +194,7 @@ export const evaluateDesign = async (
       config: {
         responseMimeType: "application/json",
         responseSchema: evaluationSchema,
-        systemInstruction: "You are a harsh but fair System Architect reviewing a design. Focus on trade-offs, tool selection, and adherence to requirements."
+        systemInstruction: "You are a harsh but fair System Architect reviewing a design. Focus on trade-offs, tool selection, cost efficiency, and adherence to requirements. Always consider cost implications of architectural decisions. Mention cost-effective alternatives when applicable."
       }
     });
 

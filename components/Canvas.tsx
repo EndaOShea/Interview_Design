@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { SystemComponent, Connection, ComponentType } from '../types';
 import { getIconForType, COMPONENT_SPECS } from '../constants';
 import { ToolType } from './BottomToolbar';
-import { X, Scaling, ArrowUp, ArrowDown } from 'lucide-react';
+import { X, Scaling, ArrowUp, ArrowDown, Pin, PinOff } from 'lucide-react';
 import { ViewState } from '../App';
 
 interface CanvasProps {
@@ -20,8 +20,8 @@ interface CanvasProps {
   onSnapshot: () => void;
 }
 
-const COMPONENT_WIDTH = 280;
-const COMPONENT_HEIGHT = 160;
+const COMPONENT_WIDTH = 158;  // Reduced by 25% more (from 210)
+const COMPONENT_HEIGHT = 90;  // Reduced by 25% more (from 120)
 
 const Canvas: React.FC<CanvasProps> = ({
   components,
@@ -41,6 +41,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null);
+  const [connectingSourceAnchor, setConnectingSourceAnchor] = useState<'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | null>(null);
   const [tempConnectionTarget, setTempConnectionTarget] = useState<{x: number, y: number} | null>(null);
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null);
 
@@ -51,6 +52,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const [currentDrawingId, setCurrentDrawingId] = useState<string | null>(null);
   const [marqueeStart, setMarqueeStart] = useState<{x: number, y: number} | null>(null);
   const [marqueeEnd, setMarqueeEnd] = useState<{x: number, y: number} | null>(null);
+  const [draggingWaypoint, setDraggingWaypoint] = useState<{connectionId: string, waypointIndex: number, startX: number, startY: number} | null>(null);
 
   // Resize State
   const [resizing, setResizing] = useState<{
@@ -77,7 +79,10 @@ const Canvas: React.FC<CanvasProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName.toLowerCase();
+      const activeType = (document.activeElement as HTMLInputElement)?.type?.toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea') return;
+      // Also check for password inputs specifically
+      if (activeType === 'password') return;
 
       if ((e.key === 'Delete' || e.key === 'Backspace')) {
         if (selectedId) {
@@ -144,6 +149,109 @@ const Canvas: React.FC<CanvasProps> = ({
       x: comp.x + dims.w / 2,
       y: comp.y + dims.h / 2
     };
+  };
+
+  // Get anchor point position on a component
+  const getAnchorPoint = (
+    id: string,
+    anchor?: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+  ): {x: number, y: number} => {
+    const comp = components.find(c => c.id === id);
+    if (!comp) return { x: 0, y: 0 };
+
+    const dims = getDimensions(comp);
+    const { x, y } = comp;
+    const w = dims.w;
+    const h = dims.h;
+
+    switch (anchor) {
+      case 'top': return { x: x + w / 2, y: y };
+      case 'bottom': return { x: x + w / 2, y: y + h };
+      case 'left': return { x: x, y: y + h / 2 };
+      case 'right': return { x: x + w, y: y + h / 2 };
+      case 'top-left': return { x: x, y: y };
+      case 'top-right': return { x: x + w, y: y };
+      case 'bottom-left': return { x: x, y: y + h };
+      case 'bottom-right': return { x: x + w, y: y + h };
+      case 'center':
+      default:
+        return { x: x + w / 2, y: y + h / 2 };
+    }
+  };
+
+  // Check if a component is inside a container (layer, rect, circle)
+  const isComponentInside = (childComp: SystemComponent, containerComp: SystemComponent): boolean => {
+    const containerDims = getDimensions(containerComp);
+    const childDims = getDimensions(childComp);
+
+    const containerType = containerComp.type;
+
+    if (containerType === ComponentType.STRUCTURE_LAYER || containerType === ComponentType.ANNOTATION_RECT) {
+      // Rectangle bounds check
+      return (
+        childComp.x >= containerComp.x &&
+        childComp.y >= containerComp.y &&
+        (childComp.x + childDims.w) <= (containerComp.x + containerDims.w) &&
+        (childComp.y + childDims.h) <= (containerComp.y + containerDims.h)
+      );
+    } else if (containerType === ComponentType.ANNOTATION_CIRCLE) {
+      // Circle bounds check - check if child center is inside circle
+      const childCenterX = childComp.x + childDims.w / 2;
+      const childCenterY = childComp.y + childDims.h / 2;
+      const circleCenterX = containerComp.x + containerDims.w / 2;
+      const circleCenterY = containerComp.y + containerDims.h / 2;
+      const radiusX = containerDims.w / 2;
+      const radiusY = containerDims.h / 2;
+
+      const normalizedX = (childCenterX - circleCenterX) / radiusX;
+      const normalizedY = (childCenterY - circleCenterY) / radiusY;
+
+      return (normalizedX * normalizedX + normalizedY * normalizedY) <= 1;
+    }
+
+    return false;
+  };
+
+  // Toggle pinning: detect all components inside container and pin/unpin them
+  const handleTogglePin = (containerId: string) => {
+    onSnapshot(); // Save state before change
+
+    const container = components.find(c => c.id === containerId);
+    if (!container) return;
+
+    const isPinned = (container.childIds && container.childIds.length > 0);
+
+    if (isPinned) {
+      // Unpin all children
+      setComponents(prev => prev.map(c => {
+        if (c.id === containerId) {
+          return { ...c, childIds: [] };
+        }
+        if (c.parentId === containerId) {
+          const { parentId, ...rest } = c;
+          return rest;
+        }
+        return c;
+      }));
+    } else {
+      // Pin all components inside this container
+      const childrenInside = components.filter(c =>
+        c.id !== containerId &&
+        isComponentInside(c, container)
+      );
+
+      const childIds = childrenInside.map(c => c.id);
+
+      setComponents(prev => prev.map(c => {
+        if (c.id === containerId) {
+          return { ...c, childIds };
+        }
+        if (childIds.includes(c.id)) {
+          return { ...c, parentId: containerId };
+        }
+        return c;
+      }));
+    }
   };
 
   // Calculate intersection point between line segment (center -> target) and component boundary
@@ -236,8 +344,8 @@ const Canvas: React.FC<CanvasProps> = ({
     const x = (e.clientX - rect.left - viewState.x) / viewState.zoom;
     const y = (e.clientY - rect.top - viewState.y) / viewState.zoom;
 
-    // Panning with middle mouse or space+drag
-    if (isMiddleClick || (isLeftClick && isSpaceDown)) {
+    // Panning with middle mouse, space+drag, or pan tool
+    if (isMiddleClick || (isLeftClick && isSpaceDown) || (isLeftClick && activeTool === 'pan')) {
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY });
       return;
@@ -329,17 +437,53 @@ const Canvas: React.FC<CanvasProps> = ({
      setConnections(prev => prev.filter(c => c.id !== id));
   };
 
+  const handleAddWaypoint = (connectionId: string, x: number, y: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSnapshot(); // Save state before adding waypoint
+
+    setConnections(prev => prev.map(conn => {
+      if (conn.id === connectionId) {
+        const waypoints = conn.waypoints || [];
+        return {
+          ...conn,
+          waypoints: [...waypoints, { x, y }]
+        };
+      }
+      return conn;
+    }));
+  };
+
+  const handleAnchorClick = (e: React.MouseEvent, componentId: string, anchor: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => {
+    e.stopPropagation();
+
+    if (activeTool === 'connect_arrow' || activeTool === 'connect_line' || activeTool === 'connect_loop') {
+      if (!connectingSourceId) {
+        // Starting a new connection from this anchor
+        setConnectingSourceId(componentId);
+        setConnectingSourceAnchor(anchor);
+
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const x = (e.clientX - rect.left - viewState.x) / viewState.zoom;
+          const y = (e.clientY - rect.top - viewState.y) / viewState.zoom;
+          setTempConnectionTarget({ x, y });
+        }
+      }
+    }
+  };
+
   const handleMouseDownComponent = (e: React.MouseEvent, id: string) => {
     if (e.button === 1 || (e.button === 0 && e.getModifierState("Space"))) {
       handleCanvasMouseDown(e);
       return;
     }
 
-    // Connection Logic: Drag to Connect
+    // Connection Logic: Drag to Connect (fallback to center if no anchor clicked)
     if (activeTool === 'connect_arrow' || activeTool === 'connect_line' || activeTool === 'connect_loop') {
       e.stopPropagation();
       setConnectingSourceId(id);
-      
+      setConnectingSourceAnchor('center'); // Default to center
+
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
          const x = (e.clientX - rect.left - viewState.x) / viewState.zoom;
@@ -352,15 +496,15 @@ const Canvas: React.FC<CanvasProps> = ({
     if (activeTool !== 'select') return;
     if (e.shiftKey) return;
     e.stopPropagation();
-    
+
     onSnapshot(); // Save state before starting drag
     setDraggedComponent({ id, startX: e.clientX, startY: e.clientY });
   };
 
-  const handleMouseUpComponent = (e: React.MouseEvent, targetId: string) => {
+  const handleMouseUpComponent = (e: React.MouseEvent, targetId: string, targetAnchor?: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => {
     // NOTE: We do NOT stop propagation here so that the canvas handleMouseUp can fire
     // and clear drag states (draggedComponent, resizing).
-    
+
     // Complete Connection
     if (connectingSourceId) {
        // Loop connector allows sourceId === targetId
@@ -383,25 +527,28 @@ const Canvas: React.FC<CanvasProps> = ({
             targetId: targetId,
             label: '',
             type,
-            color: connectionColor
+            color: connectionColor,
+            sourceAnchor: connectingSourceAnchor || undefined,
+            targetAnchor: targetAnchor || 'center'
           };
-          
+
           // Prevent duplicates
           const exists = connections.some(
-            c => c.id !== newConnection.id && 
+            c => c.id !== newConnection.id &&
                  c.type === newConnection.type &&
-                 c.sourceId === newConnection.sourceId && 
+                 c.sourceId === newConnection.sourceId &&
                  c.targetId === newConnection.targetId
           );
-          
+
           if (!exists) {
             onSnapshot(); // Save state before adding connection
             setConnections(prev => [...prev, newConnection]);
           }
        }
     }
-    
+
     setConnectingSourceId(null);
+    setConnectingSourceAnchor(null);
     setTempConnectionTarget(null);
   };
 
@@ -427,13 +574,40 @@ const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Dragging Waypoint
+    if (draggingWaypoint) {
+      const dx = (e.clientX - draggingWaypoint.startX) / viewState.zoom;
+      const dy = (e.clientY - draggingWaypoint.startY) / viewState.zoom;
+
+      setConnections(prev => prev.map(conn => {
+        if (conn.id === draggingWaypoint.connectionId) {
+          const waypoints = [...(conn.waypoints || [])];
+          if (waypoints[draggingWaypoint.waypointIndex]) {
+            waypoints[draggingWaypoint.waypointIndex] = {
+              x: waypoints[draggingWaypoint.waypointIndex].x + dx,
+              y: waypoints[draggingWaypoint.waypointIndex].y + dy
+            };
+          }
+          return { ...conn, waypoints };
+        }
+        return conn;
+      }));
+
+      setDraggingWaypoint({
+        ...draggingWaypoint,
+        startX: e.clientX,
+        startY: e.clientY
+      });
+      return;
+    }
+
     // Drawing
     if (currentDrawingId && activeTool === 'pen') {
        const rect = canvasRef.current?.getBoundingClientRect();
        if (rect) {
           const rawX = (e.clientX - rect.left - viewState.x) / viewState.zoom;
           const rawY = (e.clientY - rect.top - viewState.y) / viewState.zoom;
-          
+
           setComponents(prev => prev.map(c => {
              if (c.id === currentDrawingId) {
                 // Points are relative to component X,Y
@@ -543,7 +717,13 @@ const Canvas: React.FC<CanvasProps> = ({
       const dy = (e.clientY - draggedComponent.startY) / viewState.zoom;
 
       setComponents(prev => prev.map(c => {
+        // Move the dragged component
         if (c.id === draggedComponent.id) {
+          return { ...c, x: c.x + dx, y: c.y + dy };
+        }
+        // Move children if they're pinned to this component
+        const draggedComp = prev.find(comp => comp.id === draggedComponent.id);
+        if (draggedComp?.childIds && draggedComp.childIds.includes(c.id)) {
           return { ...c, x: c.x + dx, y: c.y + dy };
         }
         return c;
@@ -565,10 +745,12 @@ const Canvas: React.FC<CanvasProps> = ({
     setResizing(null);
     setIsPanning(false);
     setCurrentDrawingId(null);
-    
+    setDraggingWaypoint(null);
+
     // If we were dragging a connection and didn't hit a component, cancel it
     if (connectingSourceId) {
         setConnectingSourceId(null);
+        setConnectingSourceAnchor(null);
         setTempConnectionTarget(null);
     }
   };
@@ -604,6 +786,7 @@ const Canvas: React.FC<CanvasProps> = ({
     if (resizing) return 'cursor-nwse-resize';
     if (isPanning) return 'cursor-grabbing';
     if (draggedComponent) return 'cursor-grabbing';
+    if (activeTool === 'pan') return isPanning ? 'cursor-grabbing' : 'cursor-grab';
     if (activeTool === 'select' && hoveredId) return 'cursor-grab';
     if (activeTool === 'select') return 'cursor-default';
     if (activeTool === 'text') return 'cursor-text';
@@ -665,10 +848,18 @@ const Canvas: React.FC<CanvasProps> = ({
           </defs>
           
           {/* Temporary Connection Line being dragged */}
-          {connectingSourceId && tempConnectionTarget && (
-             <line 
-                x1={getIntersection(connectingSourceId, tempConnectionTarget).x + 5000}
-                y1={getIntersection(connectingSourceId, tempConnectionTarget).y + 5000}
+          {connectingSourceId && tempConnectionTarget && (() => {
+            let startPoint: {x: number, y: number};
+            if (connectingSourceAnchor) {
+              startPoint = getAnchorPoint(connectingSourceId, connectingSourceAnchor);
+            } else {
+              startPoint = getIntersection(connectingSourceId, tempConnectionTarget);
+            }
+
+            return (
+              <line
+                x1={startPoint.x + 5000}
+                y1={startPoint.y + 5000}
                 x2={tempConnectionTarget.x + 5000}
                 y2={tempConnectionTarget.y + 5000}
                 stroke={activeTool === 'connect_arrow' ? '#000000' : (activeTool === 'connect_loop' ? '#eab308' : selectedColor)}
@@ -676,8 +867,9 @@ const Canvas: React.FC<CanvasProps> = ({
                 strokeDasharray="5,5"
                 markerEnd={activeTool === 'connect_arrow' ? `url(#${getMarkerId('#000000')})` : undefined}
                 className="opacity-60"
-             />
-          )}
+              />
+            );
+          })()}
 
           {connections.map(conn => {
             const sourceComp = components.find(c => c.id === conn.sourceId);
@@ -749,33 +941,95 @@ const Canvas: React.FC<CanvasProps> = ({
                 midX = cx;
                 midY = cy;
             } else {
-                // Straight Line
-                const start = getIntersection(conn.sourceId, targetCenter);
-                const end = getIntersection(conn.targetId, sourceCenter);
-                pathData = `M ${start.x + offsetX} ${start.y + offsetY} L ${end.x + offsetX} ${end.y + offsetY}`;
-                midX = (start.x + end.x) / 2 + offsetX;
-                midY = (start.y + end.y) / 2 + offsetY;
+                // Straight Line or with Waypoints
+                // Use anchor points if specified, otherwise use center intersection
+                let start: {x: number, y: number};
+                let end: {x: number, y: number};
+
+                if (conn.sourceAnchor) {
+                  start = getAnchorPoint(conn.sourceId, conn.sourceAnchor);
+                } else {
+                  start = getIntersection(conn.sourceId, targetCenter);
+                }
+
+                if (conn.targetAnchor) {
+                  end = getAnchorPoint(conn.targetId, conn.targetAnchor);
+                } else {
+                  end = getIntersection(conn.targetId, sourceCenter);
+                }
+
+                // Build path with waypoints if they exist
+                pathData = `M ${start.x + offsetX} ${start.y + offsetY}`;
+
+                if (conn.waypoints && conn.waypoints.length > 0) {
+                  conn.waypoints.forEach(wp => {
+                    pathData += ` L ${wp.x + offsetX} ${wp.y + offsetY}`;
+                  });
+                }
+
+                pathData += ` L ${end.x + offsetX} ${end.y + offsetY}`;
+
+                // Calculate midpoint (use middle waypoint if exists, otherwise middle of line)
+                if (conn.waypoints && conn.waypoints.length > 0) {
+                  const midWaypoint = conn.waypoints[Math.floor(conn.waypoints.length / 2)];
+                  midX = midWaypoint.x + offsetX;
+                  midY = midWaypoint.y + offsetY;
+                } else {
+                  midX = (start.x + end.x) / 2 + offsetX;
+                  midY = (start.y + end.y) / 2 + offsetY;
+                }
             }
 
             return (
               <g key={conn.id} className="pointer-events-auto group" style={{ color: strokeColor }}>
-                {/* Invisible wide stroke for easier selection */}
+                {/* Invisible wide stroke for easier selection and waypoint addition */}
                 <path
                   d={pathData}
                   fill="none"
-                  stroke="transparent" 
+                  stroke="transparent"
                   strokeWidth="15"
                   className="cursor-pointer"
                   onClick={(e) => { e.stopPropagation(); setEditingConnectionId(conn.id); }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    // Calculate position in world coordinates (remove SVG offset)
+                    const x = e.nativeEvent.offsetX - offsetX;
+                    const y = e.nativeEvent.offsetY - offsetY;
+                    handleAddWaypoint(conn.id, x, y, e);
+                  }}
                 />
                 <path
                   d={pathData}
                   fill="none"
-                  stroke={strokeColor} 
+                  stroke={strokeColor}
                   strokeWidth="2"
                   markerEnd={isDirected || (isLoop && conn.sourceId === conn.targetId) ? `url(#${getMarkerId(strokeColor)})` : undefined}
                   className="transition-colors opacity-80 group-hover:opacity-100"
                 />
+
+                {/* Waypoint Handles - Show as draggable circles */}
+                {conn.waypoints && conn.waypoints.map((waypoint, idx) => (
+                  <circle
+                    key={`waypoint-${idx}`}
+                    cx={waypoint.x + offsetX}
+                    cy={waypoint.y + offsetY}
+                    r="4"
+                    fill="#3b82f6"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    className="cursor-move opacity-0 group-hover:opacity-100 transition-opacity"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      onSnapshot(); // Save state before dragging waypoint
+                      setDraggingWaypoint({
+                        connectionId: conn.id,
+                        waypointIndex: idx,
+                        startX: e.clientX,
+                        startY: e.clientY
+                      });
+                    }}
+                  />
+                ))}
                 
                 {/* Label */}
                 {(conn.label || editingConnectionId === conn.id) && (
@@ -825,12 +1079,19 @@ const Canvas: React.FC<CanvasProps> = ({
           const isLayer = comp.type === ComponentType.STRUCTURE_LAYER;
           const isStart = comp.type === ComponentType.FLOW_START;
           const isEnd = comp.type === ComponentType.FLOW_END;
+          const isProcess = comp.type === ComponentType.FLOW_PROCESS;
           const isDecision = comp.type === ComponentType.FLOW_DECISION;
           const isData = comp.type === ComponentType.FLOW_DATA;
+          const isLoop = comp.type === ComponentType.FLOW_LOOP;
+          const isTimer = comp.type === ComponentType.FLOW_TIMER;
+          const isEvent = comp.type === ComponentType.FLOW_EVENT;
           const isText = comp.type === ComponentType.ANNOTATION_TEXT;
           const isRect = comp.type === ComponentType.ANNOTATION_RECT;
           const isCircle = comp.type === ComponentType.ANNOTATION_CIRCLE;
           const isDraw = comp.type === ComponentType.ANNOTATION_DRAW;
+
+          // Check if this is any flow component
+          const isFlowComponent = isStart || isEnd || isProcess || isDecision || isData || isLoop || isTimer || isEvent;
           
           // Build hierarchy breadcrumb
           let displayName = comp.tool || comp.customLabel || comp.label;
@@ -843,31 +1104,22 @@ const Canvas: React.FC<CanvasProps> = ({
               displayName = subType?.label || spec?.label || 'Unknown';
             }
 
-            // Build breadcrumb from most specific to least specific
+            // Show only the parent level (one level up from the component name)
             if (comp.tool && subType) {
-              // Tool level: show subType → category → spec
+              // Tool level: show only subType as parent
               hierarchyParts.push(subType.label);
-              if (subType.category) hierarchyParts.push(subType.category);
-              if (spec?.label) hierarchyParts.push(spec.label);
             } else if (comp.subType && subType) {
-              // SubType level: show category → spec
-              if (subType.category) hierarchyParts.push(subType.category);
+              // SubType level: show only spec as parent
               if (spec?.label) hierarchyParts.push(spec.label);
-            } else if (displayName === subType?.category && spec?.label) {
-              // Category level: show only spec
-              hierarchyParts.push(spec.label);
-            } else if (comp.label && !comp.subType && spec?.label && displayName !== spec.label) {
-              // Generic component with just a label: show spec if different
-              hierarchyParts.push(spec.label);
             }
-            // If only spec level, no breadcrumb needed
+            // Only show one parent level, not entire hierarchy
           }
 
           const showHierarchy = hierarchyParts.length > 0 && !isStart && !isEnd && !isDecision && !isText && !isRect && !isCircle && !isDraw;
 
           let baseClasses = "absolute flex flex-col items-center justify-center select-none transition-all shadow-lg";
           let shapeStyles: React.CSSProperties = {
-            backgroundColor: comp.color || '#1e3a8a',
+            backgroundColor: isFlowComponent ? 'transparent' : (comp.color || '#1e3a8a'),
           };
 
           // Special rendering for drawings
@@ -981,17 +1233,21 @@ const Canvas: React.FC<CanvasProps> = ({
                 />
               );
             }
+            // Don't render content for rect and circle annotations - they're just visual containers
+            if (isRect || isCircle) {
+              return null;
+            }
             return (
               <>
-                <div className={`mb-1 ${isLayer ? 'text-black' : 'text-white'}`} style={{ transform: 'scale(0.75)' }}>
+                <div className={`mb-1 ${isLayer || isFlowComponent ? 'text-black' : 'text-white'}`} style={{ transform: 'scale(1.125)' }}>
                     {getIconForType(comp.type)}
                   </div>
-                  <div className={`text-xs font-bold text-center truncate w-full px-1 ${isLayer ? 'text-black' : 'text-white'}`} title={displayName}>
+                  <div className={`text-xs font-bold text-center truncate w-full px-1 ${isLayer || isFlowComponent ? 'text-black' : 'text-white'}`} title={displayName}>
                     {displayName}
                   </div>
                   {showHierarchy && (
-                    <div className={`text-[9px] text-center w-full px-1 leading-tight ${isLayer ? 'text-black/70' : 'text-white/70'}`}>
-                      {hierarchyParts.join(' → ')}
+                    <div className={`text-[9px] text-center w-full px-1 leading-tight ${isLayer || isFlowComponent ? 'text-black/70' : 'text-white/70'}`}>
+                      {hierarchyParts[0]}
                     </div>
                   )}
               </>
@@ -1018,6 +1274,23 @@ const Canvas: React.FC<CanvasProps> = ({
                 <>
                   {/* Action Buttons */}
                   <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex gap-1">
+                    {/* Pin/Unpin button - only for containers (layer, rect, circle) */}
+                    {(isLayer || isRect || isCircle) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePin(comp.id);
+                        }}
+                        className={`${
+                          comp.childIds && comp.childIds.length > 0
+                            ? 'bg-green-500 hover:bg-green-600'
+                            : 'bg-slate-500 hover:bg-slate-600'
+                        } text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform`}
+                        title={comp.childIds && comp.childIds.length > 0 ? `Unpin ${comp.childIds.length} items` : 'Pin items inside'}
+                      >
+                        {comp.childIds && comp.childIds.length > 0 ? <Pin size={12} /> : <PinOff size={12} />}
+                      </button>
+                    )}
                     <button
                       onClick={(e) => handleBringToFront(comp.id, e)}
                       className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform"
@@ -1040,6 +1313,72 @@ const Canvas: React.FC<CanvasProps> = ({
                       <X size={12} />
                     </button>
                   </div>
+
+                  {/* Connection Anchor Points - Show when in connection mode */}
+                  {(activeTool === 'connect_arrow' || activeTool === 'connect_line' || activeTool === 'connect_loop') && !isText && !isDraw && (
+                    <>
+                      {/* Center */}
+                      <div
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Center"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'center')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'center')}
+                      />
+                      {/* Top */}
+                      <div
+                        className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Top"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'top')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'top')}
+                      />
+                      {/* Bottom */}
+                      <div
+                        className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Bottom"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'bottom')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'bottom')}
+                      />
+                      {/* Left */}
+                      <div
+                        className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Left"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'left')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'left')}
+                      />
+                      {/* Right */}
+                      <div
+                        className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Right"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'right')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'right')}
+                      />
+                      {/* Corners */}
+                      <div
+                        className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Top-Left"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'top-left')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'top-left')}
+                      />
+                      <div
+                        className="absolute top-0 right-0 translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Top-Right"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'top-right')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'top-right')}
+                      />
+                      <div
+                        className="absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Bottom-Left"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'bottom-left')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'bottom-left')}
+                      />
+                      <div
+                        className="absolute bottom-0 right-0 translate-x-1/2 translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer"
+                        title="Bottom-Right"
+                        onMouseDown={(e) => handleAnchorClick(e, comp.id, 'bottom-right')}
+                        onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'bottom-right')}
+                      />
+                    </>
+                  )}
 
                   {/* Resize Handles - Show for all components except flow items and drawings */}
                   {!isStart && !isEnd && !isDecision && !isData && !isDraw && (
@@ -1070,13 +1409,13 @@ const Canvas: React.FC<CanvasProps> = ({
               )}
 
               {isDecision ? (
-                <div className={`w-full h-full transform rotate-45 border-2 border-slate-700 flex items-center justify-center ${isSelected ? 'ring-2 ring-blue-500/50' : ''}`} style={{ backgroundColor: comp.color || '#ca8a04' }}>
+                <div className={`w-full h-full transform rotate-45 border-2 border-slate-700 flex items-center justify-center ${isSelected ? 'ring-2 ring-blue-500/50' : ''}`} style={{ backgroundColor: 'transparent' }}>
                   <div className="transform -rotate-45 flex flex-col items-center w-full">
                       {renderContent()}
                   </div>
                 </div>
               ) : isData ? (
-                <div className={`w-full h-full transform -skew-x-12 border-2 border-slate-700 flex items-center justify-center ${isSelected ? 'ring-2 ring-blue-500/50' : ''}`} style={{ backgroundColor: comp.color || '#9333ea' }}>
+                <div className={`w-full h-full transform -skew-x-12 border-2 border-slate-700 flex items-center justify-center ${isSelected ? 'ring-2 ring-blue-500/50' : ''}`} style={{ backgroundColor: 'transparent' }}>
                     <div className="transform skew-x-12 flex flex-col items-center w-full px-4">
                       {renderContent()}
                     </div>

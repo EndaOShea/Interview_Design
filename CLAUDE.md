@@ -59,9 +59,15 @@ docker run -d -p 2350:2350 -e GEMINI_API_KEY=your_key --name architectai archite
 The Docker setup uses:
 - **Multi-stage build**: Builder stage (Node.js) + Production stage (Nginx Alpine)
 - **Nginx** serves the static build on port 2350
+- **Runtime config injection**: API key loaded at startup via `docker-entrypoint.sh`, NOT baked into image
 - **Health checks** ensure container availability
 - **Gzip compression** and security headers configured in nginx.conf
 - **Development mode**: Mounts source code for hot reload on port 2351
+
+**Security Note**: The API key is injected at runtime, not during build. This means:
+- The Docker image contains NO secrets and is safe to share
+- You can use the same image across environments with different API keys
+- Keys can be rotated by restarting the container with new env vars
 
 ## Architecture & Key Concepts
 

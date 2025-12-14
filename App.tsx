@@ -35,7 +35,7 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryState[]>([]);
 
   // View State (Pan & Zoom)
-  const [viewState, setViewState] = useState<ViewState>({ x: 0, y: 0, zoom: 1 });
+  const [viewState, setViewState] = useState<ViewState>({ x: 0, y: 0, zoom: 0.6 });
 
   // UI State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -216,7 +216,7 @@ const App: React.FC = () => {
     setComponents([]);
     setConnections([]);
     setEvaluation(null);
-    setViewState({ x: 0, y: 0, zoom: 1 }); // Reset view
+    setViewState({ x: 0, y: 0, zoom: 0.6 }); // Reset view to default 60%
   };
 
   const applyColorToSelection = (color: string) => {
@@ -262,7 +262,7 @@ const App: React.FC = () => {
           setSelectedColor={applyColorToSelection}
           zoom={viewState.zoom}
           onZoomChange={(z) => setViewState(prev => ({ ...prev, zoom: z }))}
-          onZoomReset={() => setViewState({ x: 0, y: 0, zoom: 1 })}
+          onZoomReset={() => setViewState({ x: 0, y: 0, zoom: 0.6 })}
           onUndo={handleUndo}
           canUndo={history.length > 0}
         />

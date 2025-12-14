@@ -11,8 +11,14 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        // For local development only - load from .env
+        // In production (Docker), this will be loaded from window.ENV at runtime
+        'process.env.API_KEY': mode === 'development'
+          ? JSON.stringify(env.GEMINI_API_KEY)
+          : JSON.stringify(undefined),
+        'process.env.GEMINI_API_KEY': mode === 'development'
+          ? JSON.stringify(env.GEMINI_API_KEY)
+          : JSON.stringify(undefined)
       },
       resolve: {
         alias: {

@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   MousePointer2, ArrowRight, Minus, Type, Square, Circle,
-  ZoomIn, ZoomOut, RotateCw, PenTool, Undo2
+  ZoomIn, ZoomOut, RotateCw, PenTool, Undo2, Hand
 } from 'lucide-react';
 import { ComponentType } from '../types';
 
-export type ToolType = 'select' | 'connect_arrow' | 'connect_line' | 'connect_loop' | 'text' | 'rect' | 'circle' | 'pen';
+export type ToolType = 'select' | 'pan' | 'connect_arrow' | 'connect_line' | 'connect_loop' | 'text' | 'rect' | 'circle' | 'pen';
 
 interface BottomToolbarProps {
   activeTool: ToolType;
@@ -73,9 +73,10 @@ const BottomToolbar: React.FC<BottomToolbarProps> = ({
       <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 rounded-xl shadow-2xl flex items-center gap-2 px-3">
         
         <ToolButton tool="select" icon={<MousePointer2 size={16} />} label="Select / Move" />
-        
+        <ToolButton tool="pan" icon={<Hand size={16} />} label="Pan / Grab Scroll" />
+
         <div className="w-px h-6 bg-slate-700 mx-1" />
-        
+
         <ToolButton tool="connect_arrow" icon={<ArrowRight size={16} />} label="Arrow Connector" />
         <ToolButton tool="connect_line" icon={<Minus size={16} />} label="Line Connector" />
         <ToolButton tool="connect_loop" icon={<RotateCw size={16} />} label="Loop Connector" />

@@ -76,6 +76,7 @@ export interface ComponentSubType {
   label: string;
   description: string;
   tools: string[]; // Suggested tools
+  costIndicator?: 'low' | 'medium' | 'high' | 'variable'; // Optional cost indicator
 }
 
 export interface ComponentDefinition {
@@ -102,6 +103,10 @@ export interface SystemComponent {
   color?: string; // Hex color for styling
   zOrder?: number; // Custom z-order for layering (higher = front)
 
+  // Grouping/Pinning
+  parentId?: string; // ID of parent container (layer, rect, circle) that this is pinned to
+  childIds?: string[]; // IDs of children pinned to this container
+
   // For Freehand
   points?: {x: number, y: number}[];
 }
@@ -113,6 +118,13 @@ export interface Connection {
   label?: string;
   type?: 'directed' | 'undirected' | 'loop'; // Arrow vs Line vs Loop
   color?: string;
+
+  // Connection points (anchor points on the components)
+  sourceAnchor?: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  targetAnchor?: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+  // Waypoints for bending the line (coordinates in world space)
+  waypoints?: {x: number, y: number}[];
 }
 
 export interface Challenge {

@@ -98,58 +98,19 @@ const Sidebar: React.FC = () => {
         <div className="p-2 space-y-4">
 
           {/* Global Color Picker */}
-          <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg p-3 border border-blue-800/30">
-            <h2 className="text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-wider">Component Color</h2>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={globalColor}
-                onChange={(e) => setGlobalColor(e.target.value)}
-                className="w-10 h-10 rounded-lg cursor-pointer border-2 border-slate-700 hover:border-blue-500 transition-colors"
-                style={{
-                  WebkitAppearance: 'none',
-                  appearance: 'none',
-                  backgroundColor: globalColor
-                }}
-                title="Choose component color"
-              />
-              <div className="flex-1">
-                <div className="text-xs text-slate-300 font-medium mb-1">Active Color</div>
-                <input
-                  type="text"
-                  value={globalColor}
-                  onChange={(e) => setGlobalColor(e.target.value)}
-                  className="w-full bg-slate-800/50 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                  placeholder="#1e3a8a"
-                />
-              </div>
-            </div>
-            <div className="mt-2 text-[10px] text-slate-500">
-              New components will use this color
-            </div>
-          </div>
-
-          {/* Annotations */}
-          <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-800">
-            <h2 className="text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-wider">Annotations</h2>
-            <div className="grid grid-cols-3 gap-2">
-               {[ComponentType.ANNOTATION_TEXT, ComponentType.ANNOTATION_RECT, ComponentType.ANNOTATION_CIRCLE].map(type => {
-                 const spec = COMPONENT_SPECS[type];
-                 return (
-                   <div
-                      key={type}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, type, spec.label)}
-                      className="relative flex flex-col items-center justify-center p-2 bg-slate-800 rounded border border-slate-700 hover:border-blue-500 cursor-grab transition-colors gap-1 group"
-                      title={spec.label}
-                   >
-                      <div className="text-purple-400 text-sm">{spec.icon}</div>
-                      <span className="text-[9px] text-slate-300 text-center leading-tight">{spec.label}</span>
-                      <GripVertical size={10} className="absolute top-0.5 right-0.5 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                   </div>
-                 );
-               })}
-            </div>
+          <div className="flex items-center justify-center">
+            <input
+              type="color"
+              value={globalColor}
+              onChange={(e) => setGlobalColor(e.target.value)}
+              className="w-10 h-10 rounded-lg cursor-pointer border-2 border-slate-700 hover:border-blue-500 transition-colors"
+              style={{
+                WebkitAppearance: 'none',
+                appearance: 'none',
+                backgroundColor: globalColor
+              }}
+              title="Choose component color"
+            />
           </div>
 
           {/* Quick Flow Tools */}

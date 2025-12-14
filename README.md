@@ -19,14 +19,15 @@ View your app in AI Studio: https://ai.studio/apps/drive/1iYpyjJWfwrknbXcqSIgjbM
 - **Color customization** for visual grouping
 
 ### AI-Powered Learning
-- **Challenge Generation**: AI creates realistic system design interview questions with requirements and constraints
-- **Design Evaluation**: Get scored feedback (0-100) with pros, cons, recommendations, and security concerns
-- **Smart Hints**: Receive starter suggestions and architecture strategies when stuck
+- **Challenge Generation**: AI creates realistic system design interview questions with requirements, constraints, and **cost considerations**
+- **Design Evaluation**: Get scored feedback (0-100) with pros, cons, recommendations, security concerns, and **cost efficiency analysis**
+- **Smart Hints**: Receive starter suggestions and architecture strategies when stuck, including **cost optimization opportunities**
 - **AI Tutor**: Real-time chat assistant that understands your challenge and available components
 
 ### Component Architecture
 - **16-Layer System Classification**: From client entry to governance & compliance
 - **Hierarchical Selection**: Choose layer → subtype → specific tool (e.g., Storage → Document DB → MongoDB)
+- **Cost Indicators**: Components include cost awareness (low/medium/high/variable) to help with budget-conscious design decisions
 - **Flow Components**: Start/End, Process, Decision, Loop, Timer, Event for logic flows
 - **Annotations**: Text, rectangles, circles, and freehand drawing for documentation
 
@@ -84,6 +85,11 @@ npm run preview
    # Edit .env and add your GEMINI_API_KEY
    ```
 
+   **Security Note**: The API key is injected at runtime, NOT baked into the Docker image. This means:
+   - The Docker image contains NO secrets and is safe to share
+   - You can use the same image across environments with different API keys
+   - Keys can be rotated without rebuilding the image
+
 2. **Build and run with Docker Compose**
    ```bash
    docker-compose up -d
@@ -100,6 +106,8 @@ npm run preview
    ```bash
    docker-compose down
    ```
+
+For detailed deployment instructions and troubleshooting, see [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
 
 ### Development with Docker
 
@@ -177,9 +185,20 @@ The AI Tutor requires a separate Gemini API key for privacy:
 
 Your key is stored locally in your browser and never sent to any server except Google's Gemini API.
 
-## Contributing
+## Documentation
 
-See [CLAUDE.md](./CLAUDE.md) for detailed architecture documentation and development guidelines.
+- **[CLAUDE.md](./CLAUDE.md)** - Detailed architecture and development guidelines
+- **[DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)** - Step-by-step deployment guide with verification
+- **[SECURITY.md](./SECURITY.md)** - Security architecture and API key management
+
+## Security
+
+API keys are managed securely:
+- **Local Development**: Keys loaded from `.env.local` at build time
+- **Docker Production**: Keys injected at runtime via `docker-entrypoint.sh`
+- **No secrets in images**: Docker images are safe to share publicly
+
+See [SECURITY.md](./SECURITY.md) for complete security documentation.
 
 ## License
 

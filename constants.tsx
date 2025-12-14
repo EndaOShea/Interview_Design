@@ -75,11 +75,11 @@ export const COMPONENT_SPECS: Record<string, ComponentDefinition> = {
     description: 'Executes business logic.',
     subTypes: [
       // 3.1 Compute Models
-      { id: 'monolith', category: '3.1 Compute Models', label: 'Monolithic Service', description: 'Single unit.', tools: ['Rails App', 'Django App', 'Spring Monolith'] },
-      { id: 'microservice', category: '3.1 Compute Models', label: 'Microservice', description: 'Decoupled service.', tools: ['Go Service', 'Node Service', 'Python Service'] },
-      { id: 'serverless', category: '3.1 Compute Models', label: 'Serverless Function', description: 'FaaS.', tools: ['AWS Lambda', 'Azure Functions', 'Google Cloud Functions'] },
-      { id: 'batch', category: '3.1 Compute Models', label: 'Batch Worker', description: 'Async processing.', tools: ['Spring Batch', 'Celery Worker'] },
-      { id: 'stream_proc', category: '3.1 Compute Models', label: 'Stream Processor', description: 'Real-time ETL.', tools: ['Spark Streaming', 'Flink', 'Kafka Streams'] },
+      { id: 'monolith', category: '3.1 Compute Models', label: 'Monolithic Service', description: 'Single unit. Low ops overhead.', tools: ['Rails App', 'Django App', 'Spring Monolith'], costIndicator: 'low' },
+      { id: 'microservice', category: '3.1 Compute Models', label: 'Microservice', description: 'Decoupled service. Higher ops cost.', tools: ['Go Service', 'Node Service', 'Python Service'], costIndicator: 'medium' },
+      { id: 'serverless', category: '3.1 Compute Models', label: 'Serverless Function', description: 'FaaS. Pay-per-invocation (cost-effective at low scale).', tools: ['AWS Lambda', 'Azure Functions', 'Google Cloud Functions'], costIndicator: 'variable' },
+      { id: 'batch', category: '3.1 Compute Models', label: 'Batch Worker', description: 'Async processing. Can use spot instances.', tools: ['Spring Batch', 'Celery Worker'], costIndicator: 'low' },
+      { id: 'stream_proc', category: '3.1 Compute Models', label: 'Stream Processor', description: 'Real-time ETL. Resource intensive.', tools: ['Spark Streaming', 'Flink', 'Kafka Streams'], costIndicator: 'high' },
       
       // 3.2 Processing Concepts
       { id: 'stateless', category: '3.2 Processing Concepts', label: 'Stateless Proc', description: 'No local state.', tools: ['12-Factor App'] },
@@ -99,14 +99,14 @@ export const COMPONENT_SPECS: Record<string, ComponentDefinition> = {
     description: 'Stores structured, semi-structured, and unstructured data.',
     subTypes: [
       // 4.1 Data Models
-      { id: 'rdbms', category: '4.1 Data Models', label: 'Relational (SQL)', description: 'Tabular structured data.', tools: ['PostgreSQL', 'MySQL', 'Aurora', 'SQL Server', 'Oracle'] },
-      { id: 'document', category: '4.1 Data Models', label: 'Document-oriented', description: 'JSON/BSON flexible schema.', tools: ['MongoDB', 'DocumentDB', 'Couchbase', 'Firestore'] },
-      { id: 'kv', category: '4.1 Data Models', label: 'Key-Value', description: 'Simple fast lookup.', tools: ['Redis', 'DynamoDB', 'Riak', 'Memcached'] },
-      { id: 'wide_col', category: '4.1 Data Models', label: 'Wide-column', description: 'Scalable sparse rows.', tools: ['Cassandra', 'HBase', 'ScyllaDB', 'BigTable'] },
-      { id: 'graph', category: '4.1 Data Models', label: 'Graph DB', description: 'Relationships & Nodes.', tools: ['Neo4j', 'Neptune', 'JanusGraph', 'TigerGraph'] },
-      { id: 'timeseries', category: '4.1 Data Models', label: 'Time-series', description: 'Time-stamped metrics.', tools: ['InfluxDB', 'TimescaleDB', 'Prometheus'] },
-      { id: 'geospatial', category: '4.1 Data Models', label: 'Geospatial', description: 'Location & spatial data.', tools: ['PostGIS', 'MongoDB Geo', 'Elasticsearch Geo'] },
-      { id: 'vector', category: '4.1 Data Models', label: 'Vector DB', description: 'High-dimensional embeddings.', tools: ['Pinecone', 'Milvus', 'Weaviate', 'Chroma'] },
+      { id: 'rdbms', category: '4.1 Data Models', label: 'Relational (SQL)', description: 'Tabular structured data. Self-hosted: low cost. Managed: medium.', tools: ['PostgreSQL', 'MySQL', 'Aurora', 'SQL Server', 'Oracle'], costIndicator: 'medium' },
+      { id: 'document', category: '4.1 Data Models', label: 'Document-oriented', description: 'JSON/BSON flexible schema. Atlas pricing scales with usage.', tools: ['MongoDB', 'DocumentDB', 'Couchbase', 'Firestore'], costIndicator: 'medium' },
+      { id: 'kv', category: '4.1 Data Models', label: 'Key-Value', description: 'Simple fast lookup. Redis: cheap self-hosted, DynamoDB: pay per request.', tools: ['Redis', 'DynamoDB', 'Riak', 'Memcached'], costIndicator: 'low' },
+      { id: 'wide_col', category: '4.1 Data Models', label: 'Wide-column', description: 'Scalable sparse rows. Cassandra self-hosted is cost-effective.', tools: ['Cassandra', 'HBase', 'ScyllaDB', 'BigTable'], costIndicator: 'medium' },
+      { id: 'graph', category: '4.1 Data Models', label: 'Graph DB', description: 'Relationships & Nodes. Managed graph DBs can be expensive.', tools: ['Neo4j', 'Neptune', 'JanusGraph', 'TigerGraph'], costIndicator: 'high' },
+      { id: 'timeseries', category: '4.1 Data Models', label: 'Time-series', description: 'Time-stamped metrics. InfluxDB open-source is cheap.', tools: ['InfluxDB', 'TimescaleDB', 'Prometheus'], costIndicator: 'low' },
+      { id: 'geospatial', category: '4.1 Data Models', label: 'Geospatial', description: 'Location & spatial data. PostGIS extension is free.', tools: ['PostGIS', 'MongoDB Geo', 'Elasticsearch Geo'], costIndicator: 'medium' },
+      { id: 'vector', category: '4.1 Data Models', label: 'Vector DB', description: 'High-dimensional embeddings. Pinecone pricing scales with vectors.', tools: ['Pinecone', 'Milvus', 'Weaviate', 'Chroma'], costIndicator: 'high' },
 
       // 4.2 Data Management Concepts
       { id: 'indexing', category: '4.2 Data Management Concepts', label: 'Indexing', description: 'Optimize retrieval.', tools: ['B-Tree', 'LSM Tree', 'Global Index', 'Inverted Index'] },
@@ -135,9 +135,9 @@ export const COMPONENT_SPECS: Record<string, ComponentDefinition> = {
     description: 'Accelerates data access.',
     subTypes: [
       // 5.1 Cache Placement
-      { id: 'local_cache', category: '5.1 Cache Placement', label: 'Application-local', description: 'In-memory.', tools: ['Guava', 'Caffeine', 'Ehcache'] },
-      { id: 'dist_cache', category: '5.1 Cache Placement', label: 'Distributed Cache', description: 'Shared cluster.', tools: ['Redis', 'Memcached', 'Hazelcast'] },
-      { id: 'edge_cache', category: '5.1 Cache Placement', label: 'Edge Cache', description: 'CDN based.', tools: ['Cloudflare Cache', 'CloudFront'] },
+      { id: 'local_cache', category: '5.1 Cache Placement', label: 'Application-local', description: 'In-memory. Free - uses app RAM.', tools: ['Guava', 'Caffeine', 'Ehcache'], costIndicator: 'low' },
+      { id: 'dist_cache', category: '5.1 Cache Placement', label: 'Distributed Cache', description: 'Shared cluster. Redis/Memcached self-hosted is cheap.', tools: ['Redis', 'Memcached', 'Hazelcast'], costIndicator: 'low' },
+      { id: 'edge_cache', category: '5.1 Cache Placement', label: 'Edge Cache', description: 'CDN based. High ROI - reduces origin load significantly.', tools: ['Cloudflare Cache', 'CloudFront'], costIndicator: 'medium' },
       
       // 5.2 Cache Strategies
       { id: 'cache_aside', category: '5.2 Cache Strategies', label: 'Cache-Aside', description: 'Lazy loading.', tools: ['Logic Pattern'] },
@@ -186,8 +186,8 @@ export const COMPONENT_SPECS: Record<string, ComponentDefinition> = {
     description: 'Accelerates global access.',
     subTypes: [
       // 8.1 Content Types
-      { id: 'static_cdn', category: '8.1 Content Types', label: 'Static Assets', description: 'JS/CSS/Images.', tools: ['CloudFront', 'Akamai', 'Fastly'] },
-      { id: 'dynamic_cdn', category: '8.1 Content Types', label: 'API Acceleration', description: 'Dynamic routing.', tools: ['Cloudflare', 'AWS Global Accelerator'] },
+      { id: 'static_cdn', category: '8.1 Content Types', label: 'Static Assets', description: 'JS/CSS/Images. Essential for global apps - high ROI.', tools: ['CloudFront', 'Akamai', 'Fastly'], costIndicator: 'medium' },
+      { id: 'dynamic_cdn', category: '8.1 Content Types', label: 'API Acceleration', description: 'Dynamic routing. More expensive than static CDN.', tools: ['Cloudflare', 'AWS Global Accelerator'], costIndicator: 'high' },
       
       // 8.2 Features
       { id: 'geo_route', category: '8.2 Features', label: 'Geo-Routing', description: 'DNS based.', tools: ['Route53', 'NS1'] }

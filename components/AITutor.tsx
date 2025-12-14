@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Challenge, HintResult } from '../types';
 import { createTutorChat } from '../services/gemini';
 import { COMPONENT_SPECS } from '../constants';
+import { encryptApiKey, decryptApiKey } from '../utils/crypto';
 import { Chat, GenerateContentResponse } from '@google/genai';
 import { MessageCircle, X, Send, Settings, Key, Bot, User, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -32,9 +33,17 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
     const storedKey = localStorage.getItem('gemini_user_api_key');
     if (storedKey) {
       try {
-        setApiKey(atob(storedKey)); // Simple decode
+        const decrypted = decryptApiKey(storedKey);
+        if (decrypted) {
+          setApiKey(decrypted);
+        } else {
+          localStorage.removeItem('gemini_user_api_key');
+          setShowSettings(true);
+        }
       } catch (e) {
-        console.error("Invalid key stored");
+        console.error("Invalid key stored - clearing");
+        localStorage.removeItem('gemini_user_api_key');
+        setShowSettings(true);
       }
     } else {
       setShowSettings(true);
@@ -111,10 +120,15 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
 
   const handleSaveKey = () => {
     if (tempKey.trim()) {
-      setApiKey(tempKey.trim());
-      localStorage.setItem('gemini_user_api_key', btoa(tempKey.trim())); // Simple encode
-      setTempKey('');
-      setShowSettings(false);
+      const encrypted = encryptApiKey(tempKey.trim());
+      if (encrypted) {
+        setApiKey(tempKey.trim());
+        localStorage.setItem('gemini_user_api_key', encrypted);
+        setTempKey('');
+        setShowSettings(false);
+      } else {
+        alert('Failed to save API key. Please try again.');
+      }
     }
   };
 
@@ -211,6 +225,8 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
                 placeholder="Paste API Key here..."
                 value={tempKey}
                 onChange={(e) => setTempKey(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
               />
               <button
@@ -281,7 +297,11 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
                    type="text"
                    value={inputValue}
                    onChange={(e) => setInputValue(e.target.value)}
-                   onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                   onKeyDown={(e) => {
+                     e.stopPropagation();
+                     if (e.key === 'Enter') handleSendMessage();
+                   }}
+                   onClick={(e) => e.stopPropagation()}
                    placeholder={challenge ? "Ask about the design..." : "Generate a challenge first..."}
                    disabled={!challenge || isLoading}
                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
