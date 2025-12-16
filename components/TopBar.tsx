@@ -1,48 +1,99 @@
 import React from 'react';
 import { Challenge } from '../types';
-import { Sparkles, Play, RotateCcw, Lightbulb } from 'lucide-react';
+import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown } from 'lucide-react';
+import { DifficultyLevel } from '../services/gemini';
 
 interface TopBarProps {
   challenge: Challenge | null;
-  onGenerateChallenge: () => void;
+  onGenerateChallenge: (difficulty: DifficultyLevel) => void;
   onEvaluate: () => void;
   onGetHint: () => void;
+  onAISolve: () => void;
   isGenerating: boolean;
   isEvaluating: boolean;
   isGettingHint: boolean;
+  isGeneratingSolution: boolean;
   hasHints: boolean;
+  hasSolution: boolean;
   onClear: () => void;
+  selectedDifficulty: DifficultyLevel;
+  onDifficultyChange: (difficulty: DifficultyLevel) => void;
 }
 
-const TopBar: React.FC<TopBarProps> = ({ 
-  challenge, 
-  onGenerateChallenge, 
+const difficultyColors: Record<DifficultyLevel, string> = {
+  Easy: 'bg-green-600 hover:bg-green-500',
+  Medium: 'bg-yellow-600 hover:bg-yellow-500',
+  Hard: 'bg-red-600 hover:bg-red-500'
+};
+
+const TopBar: React.FC<TopBarProps> = ({
+  challenge,
+  onGenerateChallenge,
   onEvaluate,
   onGetHint,
+  onAISolve,
   isGenerating,
   isEvaluating,
   isGettingHint,
+  isGeneratingSolution,
   hasHints,
-  onClear
+  hasSolution,
+  onClear,
+  selectedDifficulty,
+  onDifficultyChange
 }) => {
+  const [showDifficultyMenu, setShowDifficultyMenu] = React.useState(false);
   return (
     <div className="min-h-[4rem] border-b border-slate-800 bg-slate-900 flex flex-wrap items-center justify-between px-6 py-3 shrink-0 shadow-sm z-20 gap-4">
       
       <div className="flex items-center gap-4 flex-1 min-w-0">
-        <button
-          onClick={onGenerateChallenge}
-          disabled={isGenerating}
-          className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
-        >
-          {isGenerating ? (
-             <span className="animate-pulse">Thinking...</span>
-          ) : (
-            <>
-              <Sparkles size={16} />
-              New Challenge
-            </>
+        <div className="relative flex-shrink-0">
+          <div className="flex">
+            <button
+              onClick={() => onGenerateChallenge(selectedDifficulty)}
+              disabled={isGenerating}
+              className={`flex items-center gap-2 px-3 py-1.5 ${difficultyColors[selectedDifficulty]} text-white rounded-l-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg`}
+            >
+              {isGenerating ? (
+                <span className="animate-pulse">Thinking...</span>
+              ) : (
+                <>
+                  <Sparkles size={13} />
+                  New Challenge
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowDifficultyMenu(!showDifficultyMenu)}
+              disabled={isGenerating}
+              className={`flex items-center px-1.5 py-1.5 ${difficultyColors[selectedDifficulty]} text-white rounded-r-md border-l border-white/20 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <ChevronDown size={13} />
+            </button>
+          </div>
+          {showDifficultyMenu && (
+            <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-700 rounded-md shadow-xl z-50 min-w-[112px]">
+              {(['Easy', 'Medium', 'Hard'] as DifficultyLevel[]).map((level) => (
+                <button
+                  key={level}
+                  onClick={() => {
+                    onDifficultyChange(level);
+                    setShowDifficultyMenu(false);
+                  }}
+                  className={`w-full px-3 py-1.5 text-left text-xs hover:bg-slate-700 transition-colors flex items-center gap-2 ${
+                    selectedDifficulty === level ? 'bg-slate-700' : ''
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    level === 'Easy' ? 'bg-green-500' :
+                    level === 'Medium' ? 'bg-yellow-500' : 'bg-red-500'
+                  }`} />
+                  {level}
+                </button>
+              ))}
+            </div>
           )}
-        </button>
+        </div>
 
         {challenge && (
           <div className="flex flex-col justify-center ml-4 border-l border-slate-700 pl-4 flex-1 min-w-0">
@@ -63,20 +114,20 @@ const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
-        <button 
+        <button
           onClick={onClear}
-          className="px-3 py-2 text-slate-400 hover:text-white text-sm font-medium transition-colors"
+          className="px-2 py-1.5 text-slate-400 hover:text-white text-xs font-medium transition-colors"
           title="Clear Board"
         >
-          <RotateCcw size={16} />
+          <RotateCcw size={13} />
         </button>
 
         <button
           onClick={onGetHint}
           disabled={isGettingHint || !challenge}
-          className={`flex items-center gap-2 px-4 py-2 border rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-            ${hasHints 
-              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/50 hover:bg-yellow-500/20' 
+          className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+            ${hasHints
+              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/50 hover:bg-yellow-500/20'
               : 'bg-slate-800 hover:bg-slate-700 text-yellow-400 border-slate-700'
             }`}
           title={hasHints ? "Show cached hints" : "Get AI Hints"}
@@ -85,21 +136,41 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="animate-pulse">Asking...</span>
            ) : (
             <>
-              <Lightbulb size={16} className={hasHints ? "fill-current" : ""} />
+              <Lightbulb size={13} className={hasHints ? "fill-current" : ""} />
               <span className="hidden sm:inline">{hasHints ? 'Show Hints' : 'Hints'}</span>
             </>
            )}
         </button>
 
         <button
+          onClick={onAISolve}
+          disabled={isGeneratingSolution || !challenge}
+          className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+            ${hasSolution
+              ? 'bg-purple-500/10 text-purple-400 border-purple-500/50 hover:bg-purple-500/20'
+              : 'bg-slate-800 hover:bg-slate-700 text-purple-400 border-slate-700'
+            }`}
+          title={hasSolution ? "Show AI Solution" : "Generate AI Solution"}
+        >
+          {isGeneratingSolution ? (
+            <span className="animate-pulse">Solving...</span>
+          ) : (
+            <>
+              <Wand2 size={13} className={hasSolution ? "fill-current" : ""} />
+              <span className="hidden sm:inline">{hasSolution ? 'Show Solution' : 'Solve'}</span>
+            </>
+          )}
+        </button>
+
+        <button
           onClick={onEvaluate}
           disabled={isEvaluating || !challenge}
-          className="flex items-center gap-2 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+          className="flex items-center gap-2 px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
         >
           {isEvaluating ? 'Reviewing...' : (
             <>
-              <Play size={16} />
-              Evaluate Design
+              <Play size={13} />
+              Evaluate
             </>
           )}
         </button>

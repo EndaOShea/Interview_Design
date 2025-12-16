@@ -85,38 +85,38 @@ const Sidebar: React.FC = () => {
 
 
   return (
-    <div className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col h-full shrink-0 z-10 shadow-xl overflow-hidden">
-      <div className="p-4 border-b border-slate-800">
-        <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-          <span className="bg-blue-600 w-2 h-6 rounded-sm"></span>
-          ArchitectAI
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">System Design Studio</p>
+    <div className="w-56 bg-slate-900 border-r border-slate-800 flex flex-col h-full shrink-0 z-10 shadow-xl overflow-hidden">
+      <div className="p-3 border-b border-slate-800">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+              <span className="bg-blue-600 w-1.5 h-5 rounded-sm"></span>
+              ArchitectAI
+            </h1>
+            <p className="text-[10px] text-slate-400 mt-0.5">System Design Studio</p>
+          </div>
+          <input
+            type="color"
+            value={globalColor}
+            onChange={(e) => setGlobalColor(e.target.value)}
+            className="w-8 h-8 rounded-lg cursor-pointer border-2 border-slate-700 hover:border-blue-500 transition-colors"
+            style={{
+              WebkitAppearance: 'none',
+              appearance: 'none',
+              backgroundColor: globalColor
+            }}
+            title="Choose component color"
+          />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="p-2 space-y-4">
 
-          {/* Global Color Picker */}
-          <div className="flex items-center justify-center">
-            <input
-              type="color"
-              value={globalColor}
-              onChange={(e) => setGlobalColor(e.target.value)}
-              className="w-10 h-10 rounded-lg cursor-pointer border-2 border-slate-700 hover:border-blue-500 transition-colors"
-              style={{
-                WebkitAppearance: 'none',
-                appearance: 'none',
-                backgroundColor: globalColor
-              }}
-              title="Choose component color"
-            />
-          </div>
-
           {/* Quick Flow Tools */}
-          <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-800">
-            <h2 className="text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-wider">Logic & Flow</h2>
-            <div className="grid grid-cols-3 gap-2">
+          <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-800">
+            <h2 className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 tracking-wider">Logic & Flow</h2>
+            <div className="grid grid-cols-2 gap-1">
                {flowTools.map(type => {
                  const spec = COMPONENT_SPECS[type];
                  return (
@@ -124,11 +124,11 @@ const Sidebar: React.FC = () => {
                       key={type}
                       draggable
                       onDragStart={(e) => handleDragStart(e, type, spec.label)}
-                      className="relative flex flex-col items-center justify-center p-2 bg-slate-800 rounded border border-slate-700 hover:border-blue-500 cursor-grab transition-colors gap-1 group"
+                      className="relative flex flex-col items-center justify-center p-1 bg-slate-800 rounded border border-slate-700 hover:border-blue-500 cursor-grab transition-colors group"
                       title={spec.label}
                    >
-                     <div className="text-slate-400 mt-1">{spec.icon}</div>
-                     <span className="text-[9px] text-slate-300 truncate w-full text-center">{spec.label}</span>
+                     <div className="text-slate-400 [&>svg]:w-3 [&>svg]:h-3">{spec.icon}</div>
+                     <span className="text-[8px] text-slate-300 truncate w-full text-center leading-tight">{spec.label}</span>
                    </div>
                  )
                })}
@@ -151,47 +151,44 @@ const Sidebar: React.FC = () => {
               return (
                 <div key={spec.type} className="rounded-lg overflow-hidden border border-transparent hover:border-slate-800 transition-colors">
                   {/* Level 1: Layer Header */}
-                  <div 
-                    className={`flex items-center gap-2 p-2 cursor-pointer transition-colors group ${isExpanded ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
+                  <div
+                    className={`flex items-center gap-1.5 px-1.5 py-1 cursor-pointer transition-colors group ${isExpanded ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
                     onClick={() => toggleLayer(spec.type)}
                     draggable // Allow dragging the entire layer as a generic component
                     onDragStart={(e) => handleDragStart(e, spec.type, spec.label)}
                   >
                     <button className="text-slate-500 hover:text-white">
-                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     </button>
-                    <div className="text-blue-400">{spec.icon}</div>
-                    <span className="text-sm font-semibold text-slate-200 flex-1 truncate">{spec.label}</span>
-                    <GripVertical size={12} className="text-slate-600 opacity-50" />
+                    <div className="text-blue-400 [&>svg]:w-3.5 [&>svg]:h-3.5">{spec.icon}</div>
+                    <span className="text-xs font-medium text-slate-200 flex-1 truncate">{spec.label}</span>
+                    <GripVertical size={10} className="text-slate-600 opacity-50" />
                   </div>
 
                   {/* Level 2 & 3: Nested Content */}
                   {isExpanded && (
-                    <div className="bg-slate-900/50 border-t border-slate-800 pb-2">
+                    <div className="bg-slate-900/50 border-t border-slate-800 pb-1">
                       {Object.entries(categories).map(([catName, subTypes]) => (
-                        <div key={catName} className="mt-2 pl-4 pr-2">
+                        <div key={catName} className="mt-1 pl-3 pr-1">
                           {/* Level 2: Category Header */}
-                          <div 
+                          <div
                             draggable
                             onDragStart={(e) => handleDragStart(e, spec.type, catName)}
-                            className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between cursor-grab hover:text-slate-300 transition-colors group"
+                            className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5 flex items-center cursor-grab hover:text-slate-300 transition-colors"
                           >
-                            <span className="flex items-center gap-2">{catName}</span>
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                              {/* Using generic type for category drag color logic if needed, or we could add category IDs */}
-                            </div>
+                            {catName}
                           </div>
 
                           {/* Level 3: Component Items */}
-                          <div className="space-y-1 pl-2 border-l border-slate-800 ml-1">
+                          <div className="space-y-0 pl-1.5 border-l border-slate-800 ml-0.5">
                             {subTypes.map(sub => (
                               <div
                                 key={sub.id}
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, spec.type, undefined, sub.id)}
-                                className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-800 cursor-grab group transition-colors"
+                                className="flex items-center px-1.5 py-0.5 rounded hover:bg-slate-800 cursor-grab group transition-colors"
                               >
-                                <span className="text-xs text-slate-400 group-hover:text-slate-100 transition-colors">{sub.label}</span>
+                                <span className="text-[10px] text-slate-400 group-hover:text-slate-100 transition-colors">{sub.label}</span>
                               </div>
                             ))}
                           </div>
@@ -205,41 +202,41 @@ const Sidebar: React.FC = () => {
           </div>
 
           {/* Custom Tools */}
-          <div className="mt-6 pt-4 border-t border-slate-800">
-            <h2 className="text-[10px] font-bold text-slate-500 uppercase mb-3 flex items-center justify-between tracking-wider px-2">
+          <div className="mt-3 pt-2 border-t border-slate-800">
+            <h2 className="text-[9px] font-bold text-slate-500 uppercase mb-1.5 tracking-wider px-1">
               Custom Tools
             </h2>
-            <div className="flex flex-col gap-2 mb-3 px-2">
+            <div className="flex flex-col gap-1 mb-2 px-1">
               <input
                 type="text"
                 value={newToolName}
                 onChange={(e) => setNewToolName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addCustomTool()}
                 placeholder="Tool Name..."
-                className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-blue-500"
               />
-              <div className="flex gap-2">
+              <div className="flex gap-1">
                 <select
                   value={newToolType}
                   onChange={(e) => setNewToolType(e.target.value)}
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-blue-500"
                 >
                   <option value="">Select Layer...</option>
                   {systemLayers.map(layer => (
                     <option key={layer.type} value={layer.type}>{layer.label}</option>
                   ))}
                 </select>
-                <button 
+                <button
                   onClick={addCustomTool}
                   disabled={!newToolName.trim() || !newToolType}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white p-1.5 rounded transition-colors"
+                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white p-1 rounded transition-colors"
                 >
-                  <Plus size={14} />
+                  <Plus size={12} />
                 </button>
               </div>
             </div>
-            
-            <div className="space-y-1 px-2">
+
+            <div className="space-y-0.5 px-1">
               {customTools.map((tool, idx) => {
                 const spec = COMPONENT_SPECS[tool.type];
                 const customId = `custom-${idx}`;
@@ -248,26 +245,24 @@ const Sidebar: React.FC = () => {
                     key={customId}
                     draggable
                     onDragStart={(e) => handleDragStart(e, tool.type, tool.name, undefined, customId)}
-                    className="flex items-center justify-between p-2 bg-slate-800/50 rounded border border-slate-700/50 cursor-grab hover:bg-slate-700 group"
+                    className="flex items-center justify-between px-1.5 py-1 bg-slate-800/50 rounded border border-slate-700/50 cursor-grab hover:bg-slate-700 group"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="text-slate-400">{spec?.icon || <Box size={12}/>}</div>
-                      <span className="text-xs text-slate-300 truncate max-w-[100px]" title={tool.name}>{tool.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="text-slate-400 [&>svg]:w-3 [&>svg]:h-3">{spec?.icon || <Box size={10}/>}</div>
+                      <span className="text-[10px] text-slate-300 truncate max-w-[70px]" title={tool.name}>{tool.name}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => removeCustomTool(idx)}
-                        className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => removeCustomTool(idx)}
+                      className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 size={10} />
+                    </button>
                   </div>
                 );
               })}
               {customTools.length === 0 && (
-                <div className="text-[10px] text-slate-500 text-center py-2 italic">
-                  Create tools mapped to specific layers above.
+                <div className="text-[9px] text-slate-500 text-center py-1 italic">
+                  Create tools mapped to layers.
                 </div>
               )}
             </div>

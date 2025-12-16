@@ -20,8 +20,8 @@ interface CanvasProps {
   onSnapshot: () => void;
 }
 
-const COMPONENT_WIDTH = 158;  // Reduced by 25% more (from 210)
-const COMPONENT_HEIGHT = 90;  // Reduced by 25% more (from 120)
+const COMPONENT_WIDTH = 111;  // Reduced by 30% from 158
+const COMPONENT_HEIGHT = 63;  // Reduced by 30% from 90
 
 const Canvas: React.FC<CanvasProps> = ({
   components,
@@ -37,9 +37,12 @@ const Canvas: React.FC<CanvasProps> = ({
   setViewState,
   onSnapshot
 }) => {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Use selectedIds as the unified selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  // Helper to get single selected ID (for backwards compatibility)
+  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
   const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null);
   const [connectingSourceAnchor, setConnectingSourceAnchor] = useState<'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | null>(null);
   const [tempConnectionTarget, setTempConnectionTarget] = useState<{x: number, y: number} | null>(null);
@@ -52,6 +55,8 @@ const Canvas: React.FC<CanvasProps> = ({
   const [currentDrawingId, setCurrentDrawingId] = useState<string | null>(null);
   const [marqueeStart, setMarqueeStart] = useState<{x: number, y: number} | null>(null);
   const [marqueeEnd, setMarqueeEnd] = useState<{x: number, y: number} | null>(null);
+  const [marqueeAdditive, setMarqueeAdditive] = useState(false); // Track if Ctrl/Shift was held at start
+  const [preMarqueeSelection, setPreMarqueeSelection] = useState<string[]>([]); // Selection before marquee
   const [draggingWaypoint, setDraggingWaypoint] = useState<{connectionId: string, waypointIndex: number, startX: number, startY: number} | null>(null);
 
   // Resize State
@@ -68,12 +73,10 @@ const Canvas: React.FC<CanvasProps> = ({
 
   // Apply selected color to currently selected items ONLY when color changes (not on selection)
   useEffect(() => {
-    if (selectedId) {
-      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, color: selectedColor } : c));
-    } else if (selectedIds.length > 0) {
+    if (selectedIds.length > 0) {
       setComponents(prev => prev.map(c => selectedIds.includes(c.id) ? { ...c, color: selectedColor } : c));
     }
-  }, [selectedColor]); // Removed selectedId from dependencies
+  }, [selectedColor]); // Only trigger on color change, not selection
 
   // Keyboard Event Listener for Deletion and Layering
   useEffect(() => {
@@ -85,13 +88,7 @@ const Canvas: React.FC<CanvasProps> = ({
       if (activeType === 'password') return;
 
       if ((e.key === 'Delete' || e.key === 'Backspace')) {
-        if (selectedId) {
-          e.preventDefault();
-          onSnapshot(); // Save state before delete
-          setComponents(prev => prev.filter(c => c.id !== selectedId));
-          setConnections(prev => prev.filter(c => c.sourceId !== selectedId && c.targetId !== selectedId));
-          setSelectedId(null);
-        } else if (selectedIds.length > 0) {
+        if (selectedIds.length > 0) {
           e.preventDefault();
           onSnapshot(); // Save state before delete
           setComponents(prev => prev.filter(c => !selectedIds.includes(c.id)));
@@ -100,38 +97,50 @@ const Canvas: React.FC<CanvasProps> = ({
         }
       }
 
+      // Escape key to deselect all
+      if (e.key === 'Escape') {
+        setSelectedIds([]);
+        setEditingConnectionId(null);
+      }
+
+      // Ctrl/Cmd + A to select all
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault();
+        setSelectedIds(components.map(c => c.id));
+      }
+
       // Bring to front: Ctrl/Cmd + ]
-      if ((e.metaKey || e.ctrlKey) && e.key === ']' && selectedId) {
+      if ((e.metaKey || e.ctrlKey) && e.key === ']' && selectedIds.length > 0) {
         e.preventDefault();
         onSnapshot();
         const maxZ = Math.max(...components.map(c => c.zOrder || 0), 0);
         setComponents(prev => prev.map(c =>
-          c.id === selectedId ? { ...c, zOrder: maxZ + 1 } : c
+          selectedIds.includes(c.id) ? { ...c, zOrder: maxZ + 1 + selectedIds.indexOf(c.id) } : c
         ));
       }
 
       // Send to back: Ctrl/Cmd + [
-      if ((e.metaKey || e.ctrlKey) && e.key === '[' && selectedId) {
+      if ((e.metaKey || e.ctrlKey) && e.key === '[' && selectedIds.length > 0) {
         e.preventDefault();
         onSnapshot();
         const minZ = Math.min(...components.map(c => c.zOrder || 0), 0);
         setComponents(prev => prev.map(c =>
-          c.id === selectedId ? { ...c, zOrder: minZ - 1 } : c
+          selectedIds.includes(c.id) ? { ...c, zOrder: minZ - 1 - selectedIds.indexOf(c.id) } : c
         ));
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, components, setComponents, setConnections, onSnapshot]);
+  }, [selectedIds, components, setComponents, setConnections, onSnapshot]);
 
   const getDimensions = (comp: SystemComponent) => {
     // If custom width/height set by resize, use them
     if (comp.width && comp.height) return { w: comp.width, h: comp.height };
 
     const { type } = comp;
-    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) return { w: 120, h: 120 };
-    if (type === ComponentType.FLOW_DECISION) return { w: 200, h: 200 };
+    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) return { w: 84, h: 84 };
+    if (type === ComponentType.FLOW_DECISION) return { w: 140, h: 140 };
     if (type === ComponentType.STRUCTURE_LAYER) return { w: 800, h: 500 };
     if (type === ComponentType.ANNOTATION_RECT) return { w: 400, h: 300 };
     if (type === ComponentType.ANNOTATION_CIRCLE) return { w: 300, h: 300 };
@@ -329,7 +338,30 @@ const Canvas: React.FC<CanvasProps> = ({
   const handleComponentClick = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (activeTool === 'select') {
-       setSelectedId(id === selectedId ? null : id);
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const isShift = e.shiftKey;
+      const isSelected = selectedIds.includes(id);
+
+      if (isCtrlOrCmd) {
+        // Ctrl+click: Toggle selection
+        if (isSelected) {
+          setSelectedIds(prev => prev.filter(i => i !== id));
+        } else {
+          setSelectedIds(prev => [...prev, id]);
+        }
+      } else if (isShift) {
+        // Shift+click: Add to selection (without removing others)
+        if (!isSelected) {
+          setSelectedIds(prev => [...prev, id]);
+        }
+      } else {
+        // Regular click: Select this item only
+        // If multiple items are selected and we click one, select only that one
+        // If only this item is selected, keep it selected
+        if (!isSelected || selectedIds.length > 1) {
+          setSelectedIds([id]);
+        }
+      }
     }
   };
 
@@ -353,10 +385,21 @@ const Canvas: React.FC<CanvasProps> = ({
 
     // Start marquee selection with select tool
     if (isLeftClick && activeTool === 'select') {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const isShift = e.shiftKey;
+      const isAdditive = isCtrlOrCmd || isShift;
+
       setMarqueeStart({ x, y });
       setMarqueeEnd({ x, y });
-      setSelectedId(null);
-      setSelectedIds([]);
+      setMarqueeAdditive(isAdditive);
+
+      // Save current selection for additive mode
+      if (isAdditive) {
+        setPreMarqueeSelection([...selectedIds]);
+      } else {
+        setPreMarqueeSelection([]);
+        setSelectedIds([]);
+      }
       return;
     }
 
@@ -419,16 +462,23 @@ const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
-    setSelectedId(null);
+    setSelectedIds([]);
     setEditingConnectionId(null);
   };
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     onSnapshot(); // Save state before delete
-    setComponents(prev => prev.filter(c => c.id !== id));
-    setConnections(prev => prev.filter(c => c.sourceId !== id && c.targetId !== id));
-    if (selectedId === id) setSelectedId(null);
+    // If deleting a selected item, delete all selected items
+    if (selectedIds.includes(id)) {
+      setComponents(prev => prev.filter(c => !selectedIds.includes(c.id)));
+      setConnections(prev => prev.filter(c => !selectedIds.includes(c.sourceId) && !selectedIds.includes(c.targetId)));
+      setSelectedIds([]);
+    } else {
+      // Delete just this one item
+      setComponents(prev => prev.filter(c => c.id !== id));
+      setConnections(prev => prev.filter(c => c.sourceId !== id && c.targetId !== id));
+    }
   };
 
   const handleDeleteConnection = (id: string, e: React.MouseEvent) => {
@@ -494,8 +544,31 @@ const Canvas: React.FC<CanvasProps> = ({
     }
 
     if (activeTool !== 'select') return;
-    if (e.shiftKey) return;
     e.stopPropagation();
+
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+    const isAlreadySelected = selectedIds.includes(id);
+
+    // Handle selection on mouse down (similar to Windows Explorer)
+    if (isCtrlOrCmd) {
+      // Ctrl+click: Will toggle on click, just start drag for now if selected
+      if (!isAlreadySelected) {
+        // Add to selection and start dragging the new item
+        setSelectedIds(prev => [...prev, id]);
+      }
+    } else if (isShift) {
+      // Shift+click: Add to selection without removing
+      if (!isAlreadySelected) {
+        setSelectedIds(prev => [...prev, id]);
+      }
+    } else {
+      // Regular click on unselected item: select only this one
+      if (!isAlreadySelected) {
+        setSelectedIds([id]);
+      }
+      // If already selected, keep current selection (allows dragging multiple)
+    }
 
     onSnapshot(); // Save state before starting drag
     setDraggedComponent({ id, startX: e.clientX, startY: e.clientY });
@@ -686,7 +759,7 @@ const Canvas: React.FC<CanvasProps> = ({
         const minY = Math.min(marqueeStart.y, y);
         const maxY = Math.max(marqueeStart.y, y);
 
-        const selected = components.filter(comp => {
+        const marqueeSelected = components.filter(comp => {
           const dims = getDimensions(comp);
           const compMinX = comp.x;
           const compMaxX = comp.x + dims.w;
@@ -697,7 +770,13 @@ const Canvas: React.FC<CanvasProps> = ({
           return !(compMaxX < minX || compMinX > maxX || compMaxY < minY || compMinY > maxY);
         }).map(c => c.id);
 
-        setSelectedIds(selected);
+        // Combine with pre-marquee selection if additive mode
+        if (marqueeAdditive) {
+          const combined = new Set([...preMarqueeSelection, ...marqueeSelected]);
+          setSelectedIds(Array.from(combined));
+        } else {
+          setSelectedIds(marqueeSelected);
+        }
       }
       return;
     }
@@ -711,19 +790,31 @@ const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
-    // Dragging Component
+    // Dragging Component(s)
     if (draggedComponent) {
       const dx = (e.clientX - draggedComponent.startX) / viewState.zoom;
       const dy = (e.clientY - draggedComponent.startY) / viewState.zoom;
 
-      setComponents(prev => prev.map(c => {
-        // Move the dragged component
-        if (c.id === draggedComponent.id) {
-          return { ...c, x: c.x + dx, y: c.y + dy };
+      // Determine which components to move
+      const componentsToMove = new Set<string>();
+
+      // If the dragged component is in the selection, move all selected
+      if (selectedIds.includes(draggedComponent.id)) {
+        selectedIds.forEach(id => componentsToMove.add(id));
+      } else {
+        // Only move the dragged component
+        componentsToMove.add(draggedComponent.id);
+      }
+
+      // Add all pinned children of the components being moved
+      components.forEach(comp => {
+        if (componentsToMove.has(comp.id) && comp.childIds) {
+          comp.childIds.forEach(childId => componentsToMove.add(childId));
         }
-        // Move children if they're pinned to this component
-        const draggedComp = prev.find(comp => comp.id === draggedComponent.id);
-        if (draggedComp?.childIds && draggedComp.childIds.includes(c.id)) {
+      });
+
+      setComponents(prev => prev.map(c => {
+        if (componentsToMove.has(c.id)) {
           return { ...c, x: c.x + dx, y: c.y + dy };
         }
         return c;
@@ -738,6 +829,8 @@ const Canvas: React.FC<CanvasProps> = ({
     if (marqueeStart) {
       setMarqueeStart(null);
       setMarqueeEnd(null);
+      setMarqueeAdditive(false);
+      setPreMarqueeSelection([]);
       // selectedIds is already set from mouse move
     }
 
@@ -767,18 +860,22 @@ const Canvas: React.FC<CanvasProps> = ({
   const handleBringToFront = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     onSnapshot();
+    // If item is selected, bring all selected to front
+    const idsToMove = selectedIds.includes(id) ? selectedIds : [id];
     setComponents(prev => {
       const maxZ = Math.max(...prev.map(c => c.zOrder || 0), 0);
-      return prev.map(c => c.id === id ? { ...c, zOrder: maxZ + 1 } : c);
+      return prev.map((c, idx) => idsToMove.includes(c.id) ? { ...c, zOrder: maxZ + 1 + idsToMove.indexOf(c.id) } : c);
     });
   };
 
   const handleSendToBack = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     onSnapshot();
+    // If item is selected, send all selected to back
+    const idsToMove = selectedIds.includes(id) ? selectedIds : [id];
     setComponents(prev => {
       const minZ = Math.min(...prev.map(c => c.zOrder || 0), 0);
-      return prev.map(c => c.id === id ? { ...c, zOrder: minZ - 1 } : c);
+      return prev.map((c, idx) => idsToMove.includes(c.id) ? { ...c, zOrder: minZ - 1 - idsToMove.indexOf(c.id) } : c);
     });
   };
 
@@ -969,14 +1066,15 @@ const Canvas: React.FC<CanvasProps> = ({
 
                 pathData += ` L ${end.x + offsetX} ${end.y + offsetY}`;
 
-                // Calculate midpoint (use middle waypoint if exists, otherwise middle of line)
+                // Position label at 75% along the path (closer to arrowhead/target)
                 if (conn.waypoints && conn.waypoints.length > 0) {
-                  const midWaypoint = conn.waypoints[Math.floor(conn.waypoints.length / 2)];
-                  midX = midWaypoint.x + offsetX;
-                  midY = midWaypoint.y + offsetY;
+                  // Use last waypoint or interpolate towards end
+                  const lastWaypoint = conn.waypoints[conn.waypoints.length - 1];
+                  midX = lastWaypoint.x + (end.x - lastWaypoint.x) * 0.5 + offsetX;
+                  midY = lastWaypoint.y + (end.y - lastWaypoint.y) * 0.5 + offsetY;
                 } else {
-                  midX = (start.x + end.x) / 2 + offsetX;
-                  midY = (start.y + end.y) / 2 + offsetY;
+                  midX = start.x + (end.x - start.x) * 0.75 + offsetX;
+                  midY = start.y + (end.y - start.y) * 0.75 + offsetY;
                 }
             }
 
@@ -1034,20 +1132,20 @@ const Canvas: React.FC<CanvasProps> = ({
                 {/* Label */}
                 {(conn.label || editingConnectionId === conn.id) && (
                   <g transform={`translate(${midX}, ${midY})`}>
-                      <rect x="-20" y="-12" width="40" height="24" rx="4" fill="#0f172a" stroke={strokeColor} />
+                      <rect x="-20" y="-12" width="40" height="24" rx="4" fill="#ffffff" stroke={strokeColor} strokeWidth="1" />
                       {editingConnectionId === conn.id ? (
                         <foreignObject x="-30" y="-12" width="60" height="24">
                           <input
                             autoFocus
-                            className="w-full h-full bg-transparent text-center text-[10px] text-white focus:outline-none"
+                            className="w-full h-full bg-transparent text-center text-[10px] text-black focus:outline-none"
                             defaultValue={conn.label}
                             onBlur={(e) => updateConnectionLabel(conn.id, e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && updateConnectionLabel(conn.id, e.currentTarget.value)}
                           />
                         </foreignObject>
                       ) : (
-                        <text 
-                          x="0" y="4" textAnchor="middle" fill="#cbd5e1" fontSize="10px"
+                        <text
+                          x="0" y="4" textAnchor="middle" fill="#000000" fontSize="10px" fontWeight="500"
                           className="pointer-events-none select-none"
                         >
                           {conn.label}

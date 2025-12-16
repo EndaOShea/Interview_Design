@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
 import TopBar from './components/TopBar';
@@ -8,8 +8,10 @@ import HintModal from './components/HintModal';
 import ComponentConfigDialog from './components/ComponentConfigDialog';
 import RequirementsPanel from './components/RequirementsPanel';
 import AITutor from './components/AITutor';
-import { generateChallenge, evaluateDesign, generateHints } from './services/gemini';
-import { SystemComponent, Connection, ComponentType, Challenge, EvaluationResult, HintResult } from './types';
+import SolutionPlayer from './components/SolutionPlayer';
+import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
+import { generateChallenge, evaluateDesign, generateHints, generateSolution, improveSolution, ImprovementResult, DifficultyLevel, getUserApiKey } from './services/gemini';
+import { SystemComponent, Connection, ComponentType, Challenge, EvaluationResult, HintResult, SolutionResult, SolutionComponent, SolutionConnection } from './types';
 import { COMPONENT_SPECS } from './constants';
 
 export interface ViewState {
@@ -44,10 +46,35 @@ const App: React.FC = () => {
   
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [lastEvaluatedDesignHash, setLastEvaluatedDesignHash] = useState<string | null>(null);
+
+  // Solution Player State
+  const [solutionResult, setSolutionResult] = useState<SolutionResult | null>(null);
+  const [isGeneratingSolution, setIsGeneratingSolution] = useState(false);
+  const [showSolutionPlayer, setShowSolutionPlayer] = useState(false);
+  const [solutionStep, setSolutionStep] = useState(-1); // Start at -1 so step 0 gets applied on first walkthrough
+  const [solutionIdMap, setSolutionIdMap] = useState<Record<string, string>>({}); // Maps solution IDs to canvas IDs
+
+  // Improvement State
+  const [isEvaluatingForImprovement, setIsEvaluatingForImprovement] = useState(false);
+  const [solutionEvaluationScore, setSolutionEvaluationScore] = useState<number | null>(null);
+  const [improvementResult, setImprovementResult] = useState<ImprovementResult | null>(null);
+  const [isImproving, setIsImproving] = useState(false);
+  const [improvementStep, setImprovementStep] = useState(0);
 
   // Tools State
   const [activeTool, setActiveTool] = useState<ToolType>('select');
   const [selectedColor, setSelectedColor] = useState<string>('#1e3a8a'); // Default Navy
+
+  // Difficulty Selection
+  const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('Medium');
+
+  // AI Tutor control state (for API key prompting)
+  const [forceOpenTutor, setForceOpenTutor] = useState(false);
+  const [apiKeyNeededMessage, setApiKeyNeededMessage] = useState<string | null>(null);
+
+  // Toast Notifications
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Configuration Dialog State
   const [configDialog, setConfigDialog] = useState<{
@@ -76,12 +103,22 @@ const App: React.FC = () => {
       if (prev.length === 0) return prev;
       const lastState = prev[prev.length - 1];
       const newHistory = prev.slice(0, -1);
-      
+
       setComponents(lastState.components);
       setConnections(lastState.connections);
-      
+
       return newHistory;
     });
+  }, []);
+
+  // Toast Notification Helpers
+  const showToast = useCallback((message: string, type: ToastType = 'error') => {
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts(prev => [...prev, { id, message, type }]);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
 
   const handleDrop = (event: React.DragEvent) => {
@@ -96,8 +133,8 @@ const App: React.FC = () => {
     if (!type) return;
 
     // Calculate Position relative to Canvas World Space
-    // Sidebar width = 288px (w-72), TopBar height ~64px
-    const sidebarWidth = 288;
+    // Sidebar width = 224px (w-56), TopBar height ~64px
+    const sidebarWidth = 224;
     const topBarHeight = 64;
     
     // Convert screen coordinates to canvas world coordinates
@@ -162,29 +199,113 @@ const App: React.FC = () => {
     event.dataTransfer.dropEffect = 'move';
   };
 
-  const handleGenerateChallenge = async () => {
+  const handleGenerateChallenge = async (difficulty: DifficultyLevel) => {
     setIsGenerating(true);
     try {
-      const newChallenge = await generateChallenge();
+      const newChallenge = await generateChallenge(undefined, difficulty);
       setChallenge(newChallenge);
       setEvaluation(null);
       setHintResult(null);
-    } catch (error) {
-      alert("Failed to generate challenge. Check console/API Key.");
+      // Reset solution state
+      setSolutionResult(null);
+      setShowSolutionPlayer(false);
+      setSolutionStep(-1);
+      setSolutionIdMap({});
+      setSolutionEvaluationScore(null);
+      setImprovementResult(null);
+      setImprovementStep(0);
+      setLastEvaluatedDesignHash(null);
+      // Clear any API key error state
+      setApiKeyNeededMessage(null);
+      setForceOpenTutor(false);
+    } catch (error: any) {
+      console.error("Challenge generation error:", error);
+      // Check if this is an API key, authentication, or quota issue
+      const userHasKey = getUserApiKey();
+      if (error?.message === 'NO_API_KEY' || error?.status === 401 || error?.status === 403 || error?.error?.code === 429 || error?.status === 429) {
+        if (userHasKey) {
+          if (error?.error?.code === 429 || error?.status === 429) {
+            setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used for all AI features.");
+          } else {
+            setApiKeyNeededMessage("The app's API key is unavailable. Your saved API key will be used for all AI features.");
+          }
+        } else {
+          if (error?.error?.code === 429 || error?.status === 429) {
+            setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+          } else {
+            setApiKeyNeededMessage("No API key configured. Please enter your Google Gemini API key to use AI features.");
+          }
+        }
+        setForceOpenTutor(true);
+      } else {
+        // Other error - show user-friendly message
+        const hasKey = userHasKey;
+        if (!hasKey) {
+          setApiKeyNeededMessage("AI service error. Please provide your own API key to continue.");
+          setForceOpenTutor(true);
+        } else {
+          // Show user-friendly error message
+          if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+            showToast("The AI service is busy right now. Please try again in a moment.");
+          } else {
+            showToast("Unable to generate challenge. Please try again.");
+          }
+        }
+      }
     } finally {
       setIsGenerating(false);
     }
   };
 
+  // Callback when user provides API key through AI Tutor
+  const handleApiKeyReady = () => {
+    setApiKeyNeededMessage(null);
+    setForceOpenTutor(false);
+    // Optionally auto-retry the last action
+  };
+
+  // Create a simple hash of the design to detect changes
+  const getDesignHash = () => {
+    const designData = {
+      components: components.map(c => ({ id: c.id, type: c.type, label: c.label, tool: c.tool })),
+      connections: connections.map(c => ({ sourceId: c.sourceId, targetId: c.targetId }))
+    };
+    return JSON.stringify(designData);
+  };
+
   const handleEvaluate = async () => {
     if (!challenge) return;
+
+    const currentHash = getDesignHash();
+
+    // If we have a cached evaluation and design hasn't changed, just show it
+    if (evaluation && lastEvaluatedDesignHash === currentHash) {
+      setShowEvaluation(true);
+      return;
+    }
+
     setIsEvaluating(true);
     try {
       const result = await evaluateDesign(challenge, components, connections);
       setEvaluation(result);
+      setLastEvaluatedDesignHash(currentHash);
       setShowEvaluation(true);
-    } catch (error) {
-      alert("Evaluation failed. Check console.");
+    } catch (error: any) {
+      console.error("Evaluation failed:", error);
+      const userHasKey = getUserApiKey();
+      if (error?.error?.code === 429 || error?.status === 429) {
+        // Quota exceeded - prompt for user's API key
+        if (userHasKey) {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+        } else {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+        }
+        setForceOpenTutor(true);
+      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try evaluating again in a moment.");
+      } else {
+        showToast("Unable to evaluate your design right now. Please try again.");
+      }
     } finally {
       setIsEvaluating(false);
     }
@@ -201,10 +322,409 @@ const App: React.FC = () => {
       const result = await generateHints(challenge);
       setHintResult(result);
       setShowHint(true);
-    } catch (error) {
-       alert("Failed to get hints. Check console.");
+    } catch (error: any) {
+      console.error("Failed to get hints:", error);
+      const userHasKey = getUserApiKey();
+      if (error?.error?.code === 429 || error?.status === 429) {
+        // Quota exceeded - prompt for user's API key
+        if (userHasKey) {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+        } else {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+        }
+        setForceOpenTutor(true);
+      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try again in a moment.");
+      } else {
+        showToast("Unable to generate hints right now. Please try again.");
+      }
     } finally {
       setIsGettingHint(false);
+    }
+  };
+
+  // Component dimensions for collision detection (matches Canvas default flow component size)
+  const COMPONENT_WIDTH = 111;  // Reduced by 30% to match flow components
+  const COMPONENT_HEIGHT = 63;  // Reduced by 30% to match flow components
+  const PADDING = 40; // Padding between components
+
+  // Check if a position overlaps with existing components
+  const isPositionOccupied = (
+    x: number,
+    y: number,
+    existingComponents: SystemComponent[],
+    width: number = COMPONENT_WIDTH,
+    height: number = COMPONENT_HEIGHT
+  ): boolean => {
+    for (const comp of existingComponents) {
+      const compWidth = comp.width || COMPONENT_WIDTH;
+      const compHeight = comp.height || COMPONENT_HEIGHT;
+
+      // Check for overlap with padding
+      const overlapX = x < comp.x + compWidth + PADDING && x + width + PADDING > comp.x;
+      const overlapY = y < comp.y + compHeight + PADDING && y + height + PADDING > comp.y;
+
+      if (overlapX && overlapY) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Find a free position for a component
+  const findFreePosition = (
+    preferredX: number,
+    preferredY: number,
+    existingComponents: SystemComponent[]
+  ): { x: number, y: number } => {
+    // If preferred position is free, use it
+    if (!isPositionOccupied(preferredX, preferredY, existingComponents)) {
+      return { x: preferredX, y: preferredY };
+    }
+
+    // Try positions in a spiral pattern around the preferred position
+    const spiralStep = COMPONENT_WIDTH + PADDING;
+    const maxAttempts = 50;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Try right
+      const rightX = preferredX + (spiralStep * attempt);
+      if (!isPositionOccupied(rightX, preferredY, existingComponents)) {
+        return { x: rightX, y: preferredY };
+      }
+
+      // Try left
+      const leftX = preferredX - (spiralStep * attempt);
+      if (leftX >= 50 && !isPositionOccupied(leftX, preferredY, existingComponents)) {
+        return { x: leftX, y: preferredY };
+      }
+
+      // Try below
+      const belowY = preferredY + (COMPONENT_HEIGHT + PADDING) * attempt;
+      if (!isPositionOccupied(preferredX, belowY, existingComponents)) {
+        return { x: preferredX, y: belowY };
+      }
+
+      // Try above
+      const aboveY = preferredY - (COMPONENT_HEIGHT + PADDING) * attempt;
+      if (aboveY >= 50 && !isPositionOccupied(preferredX, aboveY, existingComponents)) {
+        return { x: preferredX, y: aboveY };
+      }
+
+      // Try diagonal positions
+      if (!isPositionOccupied(rightX, belowY, existingComponents)) {
+        return { x: rightX, y: belowY };
+      }
+      if (leftX >= 50 && !isPositionOccupied(leftX, belowY, existingComponents)) {
+        return { x: leftX, y: belowY };
+      }
+    }
+
+    // Fallback: place far to the right
+    return { x: preferredX + (spiralStep * (maxAttempts + 1)), y: preferredY };
+  };
+
+  // Auto-layout positioning based on component type
+  const getLayerPosition = (layerType: string, existingComponents: SystemComponent[]): { x: number, y: number } => {
+    // Define Y positions for different layer types (top to bottom flow)
+    const layerYPositions: Record<string, number> = {
+      'Start': 0,
+      'Clients & Entry': 130,
+      'Content Delivery': 260,
+      'Traffic Management': 390,
+      'Security': 520,
+      'Compute & App': 650,
+      'Caching': 780,
+      'Data Storage': 910,
+      'Messaging & Streaming': 1040,
+      'File & Blob Storage': 1170,
+      'Observability': 1300,
+      'Reliability & FT': 1430,
+      'Scalability': 1560,
+      'Data Governance': 1690,
+      'DevOps & Ops': 1820,
+      'Config & State': 1950,
+      'Governance & Risk': 2080,
+      'End': 2210
+    };
+
+    const baseY = layerYPositions[layerType] || 650;
+    const baseX = 100;
+
+    // Find a free position starting from the base position
+    return findFreePosition(baseX, baseY, existingComponents);
+  };
+
+  // Convert solution component to canvas component
+  const solutionToCanvasComponent = (
+    solComp: SolutionComponent,
+    existingIdMap: Record<string, string>,
+    allComponentsInStep: SolutionComponent[],
+    currentCanvasComponents: SystemComponent[],
+    alreadyPlacedInStep: SystemComponent[]
+  ): SystemComponent => {
+    const canvasId = `sol-${solComp.id}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+    // Combine existing canvas components with components already placed in this step
+    const allExistingComponents = [...currentCanvasComponents, ...alreadyPlacedInStep];
+
+    // Find a free position based on layer type
+    const position = getLayerPosition(solComp.type, allExistingComponents);
+
+    // Map type string to ComponentType enum
+    const componentType = Object.values(ComponentType).find(ct => ct === solComp.type) || ComponentType.CUSTOM;
+
+    // Generate a color based on layer type
+    const layerColors: Record<string, string> = {
+      'Start': '#22c55e',
+      'End': '#ef4444',
+      'Clients & Entry': '#3b82f6',
+      'Traffic Management': '#8b5cf6',
+      'Compute & App': '#10b981',
+      'Data Storage': '#f59e0b',
+      'Caching': '#ef4444',
+      'Messaging & Streaming': '#ec4899',
+      'File & Blob Storage': '#6366f1',
+      'Content Delivery': '#14b8a6',
+      'Observability': '#84cc16',
+      'Security': '#f97316',
+      'Reliability & FT': '#06b6d4',
+      'Scalability': '#a855f7',
+      'Config & State': '#64748b',
+      'Data Governance': '#0891b2',
+      'DevOps & Ops': '#7c3aed',
+      'Governance & Risk': '#be185d'
+    };
+
+    return {
+      id: canvasId,
+      type: componentType,
+      x: position.x,
+      y: position.y,
+      label: solComp.label,
+      tool: solComp.tool,
+      color: solComp.color || layerColors[solComp.type] || '#1e3a8a'
+    };
+  };
+
+  // Convert solution connection to canvas connection
+  const solutionToCanvasConnection = (
+    solConn: SolutionConnection,
+    idMap: Record<string, string>
+  ): Connection | null => {
+    const sourceCanvasId = idMap[solConn.sourceId];
+    const targetCanvasId = idMap[solConn.targetId];
+
+    if (!sourceCanvasId || !targetCanvasId) {
+      console.warn('Connection references unknown component:', solConn);
+      return null;
+    }
+
+    return {
+      id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sourceId: sourceCanvasId,
+      targetId: targetCanvasId,
+      label: solConn.label || '',
+      type: solConn.type === 'directed' ? 'directed' : 'undirected',
+      color: '#475569'
+    };
+  };
+
+  // Apply a solution step to the canvas
+  const applySolutionStep = useCallback((stepIndex: number) => {
+    if (!solutionResult || stepIndex >= solutionResult.steps.length) return;
+
+    const step = solutionResult.steps[stepIndex];
+    const newIdMap = { ...solutionIdMap };
+
+    handleSnapshot(); // Save state before applying step
+
+    // Add components - track already placed components to avoid overlaps within same step
+    const newComponents: SystemComponent[] = [];
+    step.components.forEach(solComp => {
+      const canvasComp = solutionToCanvasComponent(
+        solComp,
+        newIdMap,
+        step.components,
+        components,        // Current canvas components
+        newComponents      // Components already placed in this step
+      );
+      newIdMap[solComp.id] = canvasComp.id;
+      newComponents.push(canvasComp);
+    });
+
+    // Add connections
+    const newConnections: Connection[] = [];
+    step.connections.forEach(solConn => {
+      const canvasConn = solutionToCanvasConnection(solConn, newIdMap);
+      if (canvasConn) {
+        newConnections.push(canvasConn);
+      }
+    });
+
+    setSolutionIdMap(newIdMap);
+    setComponents(prev => [...prev, ...newComponents]);
+    setConnections(prev => [...prev, ...newConnections]);
+  }, [solutionResult, solutionIdMap, handleSnapshot, components]);
+
+  // Handle AI Solve button click
+  const handleAISolve = async () => {
+    if (!challenge) return;
+
+    // If we already have a solution, just show the player
+    if (solutionResult) {
+      setShowSolutionPlayer(true);
+      return;
+    }
+
+    setIsGeneratingSolution(true);
+    try {
+      const result = await generateSolution(challenge, hintResult);
+      setSolutionResult(result);
+      setShowSolutionPlayer(true);
+      setSolutionStep(-1); // Start at -1 so step 0 gets applied when walkthrough starts
+      setSolutionIdMap({});
+    } catch (error: any) {
+      console.error("Failed to generate solution:", error);
+      const userHasKey = getUserApiKey();
+      if (error?.error?.code === 429 || error?.status === 429) {
+        // Quota exceeded - prompt for user's API key
+        if (userHasKey) {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+        } else {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+        }
+        setForceOpenTutor(true);
+      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try again in a moment.");
+      } else {
+        showToast("Unable to generate solution right now. Please try again.");
+      }
+    } finally {
+      setIsGeneratingSolution(false);
+    }
+  };
+
+  // Handle step change in solution player
+  const handleSolutionStepChange = (newStep: number) => {
+    if (!solutionResult) return;
+
+    // If going forward (or starting fresh after reset when solutionStep is -1), apply the new step
+    if (newStep > solutionStep) {
+      applySolutionStep(newStep);
+    }
+
+    setSolutionStep(newStep);
+  };
+
+  // Handle reset solution
+  const handleSolutionReset = () => {
+    setSolutionStep(-1); // Reset to -1 so step 0 will be applied when walkthrough starts
+    setSolutionIdMap({});
+    setSolutionEvaluationScore(null);
+    setImprovementResult(null);
+    setImprovementStep(0);
+    // Clear canvas
+    handleSnapshot();
+    setComponents([]);
+    setConnections([]);
+  };
+
+  // Check if solution has already been applied to canvas
+  const hasAppliedSolution = Object.keys(solutionIdMap).length > 0;
+
+  // Handle solution completion - evaluate and improve
+  const handleSolutionComplete = async () => {
+    if (!challenge) return;
+
+    // If we already have an evaluation score >= 85, just show evaluation modal
+    if (solutionEvaluationScore !== null && solutionEvaluationScore >= 85) {
+      setShowEvaluation(true);
+      return;
+    }
+
+    // If we already have an evaluation and improvements, apply the next improvement
+    if (solutionEvaluationScore !== null && improvementResult) {
+      // Apply the next improvement step
+      if (improvementStep < improvementResult.steps.length) {
+        const step = improvementResult.steps[improvementStep];
+        const newIdMap = { ...solutionIdMap };
+
+        handleSnapshot();
+
+        // Add components from improvement step
+        const newComponents: SystemComponent[] = [];
+        step.components.forEach(solComp => {
+          const canvasComp = solutionToCanvasComponent(
+            solComp,
+            newIdMap,
+            step.components,
+            components,
+            newComponents
+          );
+          newIdMap[solComp.id] = canvasComp.id;
+          newComponents.push(canvasComp);
+        });
+
+        // Add connections
+        const newConnections: Connection[] = [];
+        step.connections.forEach(solConn => {
+          const canvasConn = solutionToCanvasConnection(solConn, newIdMap);
+          if (canvasConn) {
+            newConnections.push(canvasConn);
+          }
+        });
+
+        setSolutionIdMap(newIdMap);
+        setComponents(prev => [...prev, ...newComponents]);
+        setConnections(prev => [...prev, ...newConnections]);
+        setImprovementStep(prev => prev + 1);
+
+        // If all improvements applied, re-evaluate
+        if (improvementStep + 1 >= improvementResult.steps.length) {
+          // Show final score
+          setSolutionEvaluationScore(improvementResult.expectedScoreImprovement);
+          setShowEvaluation(true);
+        }
+      }
+      return;
+    }
+
+    // First time - evaluate the design
+    setIsEvaluatingForImprovement(true);
+    try {
+      const evalResult = await evaluateDesign(challenge, components, connections);
+      setEvaluation(evalResult);
+      setSolutionEvaluationScore(evalResult.score);
+
+      // If score is below 85, generate improvements
+      if (evalResult.score < 85) {
+        setIsImproving(true);
+        const improvements = await improveSolution(challenge, components, connections, evalResult);
+        setImprovementResult(improvements);
+        setIsImproving(false);
+      } else {
+        // Score is good, just show evaluation
+        setShowEvaluation(true);
+      }
+    } catch (error: any) {
+      console.error("Evaluation/Improvement error:", error);
+      const userHasKey = getUserApiKey();
+      if (error?.error?.code === 429 || error?.status === 429) {
+        // Quota exceeded - prompt for user's API key
+        if (userHasKey) {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+        } else {
+          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+        }
+        setForceOpenTutor(true);
+      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try again in a moment.");
+      } else {
+        showToast("Unable to process your design right now. Please try again.");
+      }
+    } finally {
+      setIsEvaluatingForImprovement(false);
     }
   };
 
@@ -225,16 +745,21 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 font-sans">
-      <TopBar 
+      <TopBar
         challenge={challenge}
         onGenerateChallenge={handleGenerateChallenge}
         onEvaluate={handleEvaluate}
         onGetHint={handleGetHints}
+        onAISolve={handleAISolve}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         isGettingHint={isGettingHint}
+        isGeneratingSolution={isGeneratingSolution}
         hasHints={!!hintResult}
+        hasSolution={!!solutionResult}
         onClear={handleClearBoard}
+        selectedDifficulty={selectedDifficulty}
+        onDifficultyChange={setSelectedDifficulty}
       />
       
       <div className="flex flex-1 overflow-hidden relative">
@@ -271,7 +796,28 @@ const App: React.FC = () => {
         {challenge && <RequirementsPanel challenge={challenge} />}
         
         {/* AI Tutor */}
-        <AITutor challenge={challenge} hints={hintResult} />
+        <AITutor
+          challenge={challenge}
+          hints={hintResult}
+          forceOpen={forceOpenTutor}
+          apiKeyNeededMessage={apiKeyNeededMessage}
+          onApiKeyReady={handleApiKeyReady}
+        />
+
+        {/* Solution Player */}
+        <SolutionPlayer
+          isOpen={showSolutionPlayer}
+          onClose={() => setShowSolutionPlayer(false)}
+          solution={solutionResult}
+          challenge={challenge}
+          currentStep={solutionStep}
+          onStepChange={handleSolutionStepChange}
+          onReset={handleSolutionReset}
+          onComplete={handleSolutionComplete}
+          isEvaluating={isEvaluatingForImprovement || isImproving}
+          evaluationScore={solutionEvaluationScore}
+          hasAppliedSolution={hasAppliedSolution}
+        />
 
       </div>
 
@@ -287,13 +833,16 @@ const App: React.FC = () => {
         result={hintResult}
       />
 
-      <ComponentConfigDialog 
+      <ComponentConfigDialog
         isOpen={configDialog.isOpen}
         definition={configDialog.componentType ? COMPONENT_SPECS[configDialog.componentType] : null}
         initialSubTypeId={configDialog.initialSubTypeId}
         onComplete={handleConfigComplete}
         onCancel={() => setConfigDialog({ isOpen: false, componentType: null, draftComponent: null })}
       />
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 };

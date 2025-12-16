@@ -9,6 +9,9 @@ import { MessageCircle, X, Send, Settings, Key, Bot, User, Loader2, ChevronDown,
 interface AITutorProps {
   challenge: Challenge | null;
   hints: HintResult | null;
+  forceOpen?: boolean;
+  apiKeyNeededMessage?: string | null;
+  onApiKeyReady?: () => void;
 }
 
 interface Message {
@@ -16,7 +19,7 @@ interface Message {
   text: string;
 }
 
-const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
+const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNeededMessage, onApiKeyReady }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [tempKey, setTempKey] = useState('');
@@ -25,8 +28,18 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Handle forceOpen prop
+  useEffect(() => {
+    if (forceOpen) {
+      setIsOpen(true);
+      if (!apiKey) {
+        setShowSettings(true);
+      }
+    }
+  }, [forceOpen, apiKey]);
 
   // Load API Key from local storage on mount
   useEffect(() => {
@@ -126,8 +139,12 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
         localStorage.setItem('gemini_user_api_key', encrypted);
         setTempKey('');
         setShowSettings(false);
+        // Notify parent that API key is now available
+        if (onApiKeyReady) {
+          onApiKeyReady();
+        }
       } else {
-        alert('Failed to save API key. Please try again.');
+        console.error('Failed to encrypt API key');
       }
     }
   };
@@ -165,10 +182,10 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="absolute bottom-6 right-6 z-50 p-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-500/30 transition-all hover:scale-110 group"
+        className="absolute bottom-6 right-6 z-50 p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-500/30 transition-all hover:scale-110 group"
         title="Open AI Tutor"
       >
-        <Bot size={28} />
+        <Bot size={22} />
         <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-slate-700">
           Need help?
         </span>
@@ -178,7 +195,7 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
 
   return (
     <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end animate-in slide-in-from-bottom-5 fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-80 sm:w-96 flex flex-col overflow-hidden h-[500px] max-h-[80vh]">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-64 sm:w-80 flex flex-col overflow-hidden h-[500px] max-h-[80vh]">
         
         {/* Header */}
         <div className="p-3 bg-indigo-900/30 border-b border-indigo-500/20 flex items-center justify-between">
@@ -211,12 +228,24 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints }) => {
         {/* Content Area */}
         {showSettings || !apiKey ? (
           <div className="flex-1 p-6 flex flex-col justify-center items-center bg-slate-900">
-            <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mb-4">
-              <Key size={24} className="text-indigo-400" />
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${apiKeyNeededMessage ? 'bg-amber-900/50' : 'bg-slate-800'}`}>
+              <Key size={24} className={apiKeyNeededMessage ? 'text-amber-400' : 'text-indigo-400'} />
             </div>
-            <h4 className="text-white font-bold mb-2">Setup Tutor API Key</h4>
+            <h4 className="text-white font-bold mb-2">
+              {apiKeyNeededMessage ? 'API Key Required' : 'Setup Tutor API Key'}
+            </h4>
+            {apiKeyNeededMessage && (
+              <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg px-3 py-2 mb-4">
+                <p className="text-xs text-amber-300 text-center leading-relaxed">
+                  {apiKeyNeededMessage}
+                </p>
+              </div>
+            )}
             <p className="text-xs text-slate-400 text-center mb-6 leading-relaxed">
-              To use the AI Tutor, please provide your own Google Gemini API Key. It will be stored locally in your browser.
+              {apiKey
+                ? "Your API key will be used for all AI features."
+                : "Please provide your Google Gemini API Key. It will be stored locally in your browser."
+              }
             </p>
             
             <div className="w-full space-y-3">

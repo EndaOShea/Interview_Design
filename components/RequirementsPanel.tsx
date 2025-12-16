@@ -13,22 +13,22 @@ const RequirementsPanel: React.FC<RequirementsPanelProps> = ({ challenge }) => {
     <div className="absolute top-4 right-4 z-10 flex flex-col items-end">
       <div
         className={`bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg shadow-xl transition-all duration-300 ease-in-out overflow-hidden flex flex-col ${
-          isCollapsed ? 'w-48' : 'w-80 sm:w-96 h-[500px] max-h-[80vh]'
+          isCollapsed ? 'w-40' : 'w-80 sm:w-96 h-[500px] max-h-[80vh]'
         }`}
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between p-3 bg-slate-800/50 cursor-pointer border-b border-transparent hover:border-slate-700 transition-colors"
+          className="flex items-center justify-between p-2 bg-slate-800/50 cursor-pointer border-b border-transparent hover:border-slate-700 transition-colors"
           onClick={() => setIsCollapsed(!isCollapsed)}
         >
-          <div className="flex items-center gap-2">
-            <FileText size={14} className="text-indigo-400" />
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+          <div className="flex items-center gap-1.5">
+            <FileText size={11} className="text-indigo-400" />
+            <h3 className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">
               Requirements
             </h3>
           </div>
           <button className="text-slate-500 hover:text-white">
-            {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            {isCollapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
           </button>
         </div>
 

@@ -153,3 +153,34 @@ export interface HintResult {
   architectureStrategy: string;
   keyConsiderations: string[];
 }
+
+// Solution Generation Types
+export interface SolutionComponent {
+  id: string;           // Temporary ID for referencing in connections
+  type: string;         // ComponentType value (e.g., "Data Storage")
+  subType?: string;     // SubType ID if applicable
+  tool: string;         // Specific tool name (e.g., "PostgreSQL", "Redis")
+  label: string;        // Display label
+  color?: string;       // Optional color hex
+}
+
+export interface SolutionConnection {
+  sourceId: string;     // References SolutionComponent.id
+  targetId: string;     // References SolutionComponent.id
+  label?: string;       // Connection label (e.g., "reads from", "publishes to")
+  type: 'directed' | 'undirected';
+}
+
+export interface SolutionStep {
+  title: string;                      // Step title (e.g., "Adding Data Layer")
+  explanation: string;                // Detailed explanation of this step
+  requirementsAddressed: number[];    // Indices of requirements this step addresses
+  components: SolutionComponent[];    // Components to add in this step
+  connections: SolutionConnection[];  // Connections to add in this step
+}
+
+export interface SolutionResult {
+  architectureOverview: string;       // High-level architecture explanation
+  steps: SolutionStep[];              // Array of steps to build the solution
+  finalNotes: string;                 // Summary and additional considerations
+}
