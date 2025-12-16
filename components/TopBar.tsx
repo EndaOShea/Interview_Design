@@ -1,6 +1,6 @@
 import React from 'react';
 import { Challenge } from '../types';
-import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown } from 'lucide-react';
+import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown, LayoutGrid } from 'lucide-react';
 import { DifficultyLevel } from '../services/gemini';
 
 interface TopBarProps {
@@ -9,6 +9,7 @@ interface TopBarProps {
   onEvaluate: () => void;
   onGetHint: () => void;
   onAISolve: () => void;
+  onAutoLayout: () => void;
   isGenerating: boolean;
   isEvaluating: boolean;
   isGettingHint: boolean;
@@ -32,6 +33,7 @@ const TopBar: React.FC<TopBarProps> = ({
   onEvaluate,
   onGetHint,
   onAISolve,
+  onAutoLayout,
   isGenerating,
   isEvaluating,
   isGettingHint,
@@ -123,6 +125,15 @@ const TopBar: React.FC<TopBarProps> = ({
         </button>
 
         <button
+          onClick={onAutoLayout}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 rounded-md text-xs font-medium transition-colors"
+          title="Auto-arrange components to avoid overlaps"
+        >
+          <LayoutGrid size={13} />
+          <span className="hidden sm:inline">Auto-Layout</span>
+        </button>
+
+        <button
           onClick={onGetHint}
           disabled={isGettingHint || !challenge}
           className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
@@ -165,7 +176,7 @@ const TopBar: React.FC<TopBarProps> = ({
         <button
           onClick={onEvaluate}
           disabled={isEvaluating || !challenge}
-          className="flex items-center gap-2 px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+          className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
         >
           {isEvaluating ? 'Reviewing...' : (
             <>

@@ -35,11 +35,11 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
   useEffect(() => {
     if (forceOpen) {
       setIsOpen(true);
-      if (!apiKey) {
+      if (!apiKey || apiKeyNeededMessage) {
         setShowSettings(true);
       }
     }
-  }, [forceOpen, apiKey]);
+  }, [forceOpen, apiKey, apiKeyNeededMessage]);
 
   // Load API Key from local storage on mount
   useEffect(() => {
@@ -195,7 +195,7 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
 
   return (
     <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end animate-in slide-in-from-bottom-5 fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-64 sm:w-80 flex flex-col overflow-hidden h-[500px] max-h-[80vh]">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-60 sm:w-80 flex flex-col overflow-hidden h-[500px] max-h-[80vh]">
         
         {/* Header */}
         <div className="p-3 bg-indigo-900/30 border-b border-indigo-500/20 flex items-center justify-between">
@@ -296,9 +296,9 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-slate-700' : 'bg-indigo-600'}`}>
                     {msg.role === 'user' ? <User size={14} className="text-slate-300" /> : <Bot size={14} className="text-white" />}
                   </div>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
-                    msg.role === 'user' 
-                      ? 'bg-slate-800 text-slate-200 rounded-tr-none' 
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-xs leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-slate-800 text-slate-200 rounded-tr-none'
                       : 'bg-indigo-900/40 text-indigo-100 border border-indigo-500/20 rounded-tl-none'
                   }`}>
                     {msg.text}

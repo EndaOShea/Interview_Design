@@ -58,6 +58,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const [marqueeAdditive, setMarqueeAdditive] = useState(false); // Track if Ctrl/Shift was held at start
   const [preMarqueeSelection, setPreMarqueeSelection] = useState<string[]>([]); // Selection before marquee
   const [draggingWaypoint, setDraggingWaypoint] = useState<{connectionId: string, waypointIndex: number, startX: number, startY: number} | null>(null);
+  const [draggingLabel, setDraggingLabel] = useState<{connectionId: string, startX: number, startY: number, initialOffset: {x: number, y: number}} | null>(null);
 
   // Resize State
   const [resizing, setResizing] = useState<{
@@ -647,6 +648,34 @@ const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Dragging Label
+    if (draggingLabel) {
+      const dx = (e.clientX - draggingLabel.startX) / viewState.zoom;
+      const dy = (e.clientY - draggingLabel.startY) / viewState.zoom;
+
+      setConnections(prev => prev.map(conn => {
+        if (conn.id === draggingLabel.connectionId) {
+          const newOffset = {
+            x: draggingLabel.initialOffset.x + dx,
+            y: draggingLabel.initialOffset.y + dy
+          };
+          return { ...conn, labelOffset: newOffset };
+        }
+        return conn;
+      }));
+
+      setDraggingLabel({
+        ...draggingLabel,
+        startX: e.clientX,
+        startY: e.clientY,
+        initialOffset: {
+          x: draggingLabel.initialOffset.x + dx,
+          y: draggingLabel.initialOffset.y + dy
+        }
+      });
+      return;
+    }
+
     // Dragging Waypoint
     if (draggingWaypoint) {
       const dx = (e.clientX - draggingWaypoint.startX) / viewState.zoom;
@@ -839,6 +868,7 @@ const Canvas: React.FC<CanvasProps> = ({
     setIsPanning(false);
     setCurrentDrawingId(null);
     setDraggingWaypoint(null);
+    setDraggingLabel(null);
 
     // If we were dragging a connection and didn't hit a component, cancel it
     if (connectingSourceId) {
@@ -1128,31 +1158,86 @@ const Canvas: React.FC<CanvasProps> = ({
                     }}
                   />
                 ))}
-                
+
                 {/* Label */}
-                {(conn.label || editingConnectionId === conn.id) && (
-                  <g transform={`translate(${midX}, ${midY})`}>
-                      <rect x="-20" y="-12" width="40" height="24" rx="4" fill="#ffffff" stroke={strokeColor} strokeWidth="1" />
-                      {editingConnectionId === conn.id ? (
-                        <foreignObject x="-30" y="-12" width="60" height="24">
-                          <input
-                            autoFocus
-                            className="w-full h-full bg-transparent text-center text-[10px] text-black focus:outline-none"
-                            defaultValue={conn.label}
-                            onBlur={(e) => updateConnectionLabel(conn.id, e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && updateConnectionLabel(conn.id, e.currentTarget.value)}
-                          />
-                        </foreignObject>
-                      ) : (
-                        <text
-                          x="0" y="4" textAnchor="middle" fill="#000000" fontSize="10px" fontWeight="500"
-                          className="pointer-events-none select-none"
-                        >
-                          {conn.label}
-                        </text>
-                      )}
-                  </g>
-                )}
+                {(conn.label || editingConnectionId === conn.id) && (() => {
+                  // Calculate line angle to determine automatic offset
+                  let autoOffsetY = 0;
+
+                  if (!isLoop || conn.sourceId !== conn.targetId) {
+                    // For straight lines and connections between different nodes
+                    // Calculate the angle/slope at the label position
+                    let dx = 0;
+                    let dy = 0;
+
+                    if (conn.waypoints && conn.waypoints.length > 0) {
+                      // Use angle from last waypoint to end
+                      const lastWaypoint = conn.waypoints[conn.waypoints.length - 1];
+                      const end = conn.targetAnchor
+                        ? getAnchorPoint(conn.targetId, conn.targetAnchor)
+                        : getIntersection(conn.targetId, getCenter(conn.sourceId));
+                      dx = end.x - lastWaypoint.x;
+                      dy = end.y - lastWaypoint.y;
+                    } else {
+                      // Use angle from start to end
+                      const start = conn.sourceAnchor
+                        ? getAnchorPoint(conn.sourceId, conn.sourceAnchor)
+                        : getIntersection(conn.sourceId, getCenter(conn.targetId));
+                      const end = conn.targetAnchor
+                        ? getAnchorPoint(conn.targetId, conn.targetAnchor)
+                        : getIntersection(conn.targetId, getCenter(conn.sourceId));
+                      dx = end.x - start.x;
+                      dy = end.y - start.y;
+                    }
+
+                    // If line is mostly horizontal (abs(dy) < abs(dx) * 0.5), offset label above
+                    if (Math.abs(dy) < Math.abs(dx) * 0.5) {
+                      autoOffsetY = -20; // Offset 20px above the line
+                    }
+                  }
+
+                  // Apply both automatic offset and manual user offset
+                  const labelX = midX + (conn.labelOffset?.x || 0);
+                  const labelY = midY + autoOffsetY + (conn.labelOffset?.y || 0);
+
+                  return (
+                    <g transform={`translate(${labelX}, ${labelY})`}>
+                        <rect
+                          x="-20" y="-12" width="40" height="24" rx="4"
+                          fill="#ffffff" stroke={strokeColor} strokeWidth="1"
+                          className="cursor-move"
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            onSnapshot(); // Save state before dragging label
+                            setDraggingLabel({
+                              connectionId: conn.id,
+                              startX: e.clientX,
+                              startY: e.clientY,
+                              initialOffset: conn.labelOffset || { x: 0, y: 0 }
+                            });
+                          }}
+                        />
+                        {editingConnectionId === conn.id ? (
+                          <foreignObject x="-30" y="-12" width="60" height="24">
+                            <input
+                              autoFocus
+                              className="w-full h-full bg-transparent text-center text-[10px] text-black focus:outline-none"
+                              defaultValue={conn.label}
+                              onBlur={(e) => updateConnectionLabel(conn.id, e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && updateConnectionLabel(conn.id, e.currentTarget.value)}
+                            />
+                          </foreignObject>
+                        ) : (
+                          <text
+                            x="0" y="4" textAnchor="middle" fill="#000000" fontSize="10px" fontWeight="500"
+                            className="pointer-events-none select-none"
+                          >
+                            {conn.label}
+                          </text>
+                        )}
+                    </g>
+                  );
+                })()}
                 {/* Delete button on hover */}
                 <foreignObject x={midX + 20} y={midY - 10} width="20" height="20" className="opacity-0 group-hover:opacity-100 transition-opacity">
                   <button 

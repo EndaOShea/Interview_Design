@@ -30,11 +30,11 @@ export const hasAnyApiKey = (): boolean => {
   return !!(getAppApiKey() || getUserApiKey());
 };
 
-// Get the best available API key (prefer app key, fallback to user key)
+// Get the best available API key (prefer user key, fallback to app key)
 const getApiKey = (): string => {
-  const appKey = getAppApiKey();
-  if (appKey) return appKey;
-  return getUserApiKey() || '';
+  const userKey = getUserApiKey();
+  if (userKey) return userKey;
+  return getAppApiKey() || '';
 };
 
 // Create a Gemini client with a specific API key

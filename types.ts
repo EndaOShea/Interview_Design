@@ -125,6 +125,9 @@ export interface Connection {
 
   // Waypoints for bending the line (coordinates in world space)
   waypoints?: {x: number, y: number}[];
+
+  // Label position offset (perpendicular offset from the line center)
+  labelOffset?: {x: number, y: number};
 }
 
 export interface Challenge {

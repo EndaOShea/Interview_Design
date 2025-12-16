@@ -220,6 +220,13 @@ const App: React.FC = () => {
       setForceOpenTutor(false);
     } catch (error: any) {
       console.error("Challenge generation error:", error);
+
+      // Check for service unavailable errors first (503/UNAVAILABLE)
+      if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy right now. Please try again in a moment.");
+        return;
+      }
+
       // Check if this is an API key, authentication, or quota issue
       const userHasKey = getUserApiKey();
       if (error?.message === 'NO_API_KEY' || error?.status === 401 || error?.status === 403 || error?.error?.code === 429 || error?.status === 429) {
@@ -239,17 +246,10 @@ const App: React.FC = () => {
         setForceOpenTutor(true);
       } else {
         // Other error - show user-friendly message
-        const hasKey = userHasKey;
-        if (!hasKey) {
+        showToast("Unable to generate challenge. Please try again.");
+        if (!userHasKey) {
           setApiKeyNeededMessage("AI service error. Please provide your own API key to continue.");
           setForceOpenTutor(true);
-        } else {
-          // Show user-friendly error message
-          if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
-            showToast("The AI service is busy right now. Please try again in a moment.");
-          } else {
-            showToast("Unable to generate challenge. Please try again.");
-          }
         }
       }
     } finally {
@@ -292,6 +292,13 @@ const App: React.FC = () => {
       setShowEvaluation(true);
     } catch (error: any) {
       console.error("Evaluation failed:", error);
+
+      // Check for service unavailable errors first (503/UNAVAILABLE)
+      if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try evaluating again in a moment.");
+        return;
+      }
+
       const userHasKey = getUserApiKey();
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
@@ -301,8 +308,6 @@ const App: React.FC = () => {
           setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
         }
         setForceOpenTutor(true);
-      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
-        showToast("The AI service is busy. Please try evaluating again in a moment.");
       } else {
         showToast("Unable to evaluate your design right now. Please try again.");
       }
@@ -324,6 +329,13 @@ const App: React.FC = () => {
       setShowHint(true);
     } catch (error: any) {
       console.error("Failed to get hints:", error);
+
+      // Check for service unavailable errors first (503/UNAVAILABLE)
+      if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try again in a moment.");
+        return;
+      }
+
       const userHasKey = getUserApiKey();
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
@@ -333,8 +345,6 @@ const App: React.FC = () => {
           setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
         }
         setForceOpenTutor(true);
-      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
-        showToast("The AI service is busy. Please try again in a moment.");
       } else {
         showToast("Unable to generate hints right now. Please try again.");
       }
@@ -454,6 +464,129 @@ const App: React.FC = () => {
     // Find a free position starting from the base position
     return findFreePosition(baseX, baseY, existingComponents);
   };
+
+  // Auto-layout algorithm to arrange all components properly
+  const handleAutoLayout = useCallback(() => {
+    if (components.length === 0) return;
+
+    handleSnapshot(); // Save state before layout
+
+    // Define layer order (top to bottom)
+    const layerOrder: string[] = [
+      'Start',
+      'Clients & Entry',
+      'Content Delivery',
+      'Traffic Management',
+      'Security',
+      'Compute & App',
+      'Caching',
+      'Data Storage',
+      'Messaging & Streaming',
+      'File & Blob Storage',
+      'Observability',
+      'Reliability & FT',
+      'Scalability',
+      'Data Governance',
+      'DevOps & Ops',
+      'Config & State',
+      'Governance & Risk',
+      'End',
+      // Flow and annotation types
+      'Process',
+      'Decision',
+      'Data',
+      'Loop',
+      'Timer',
+      'Event',
+      'Layer',
+      'Text',
+      'Rectangle',
+      'Circle',
+      'Freehand',
+      'Custom'
+    ];
+
+    // Group components by their type/layer
+    const componentsByLayer: Record<string, SystemComponent[]> = {};
+    components.forEach(comp => {
+      const layer = comp.type as string;
+      if (!componentsByLayer[layer]) {
+        componentsByLayer[layer] = [];
+      }
+      componentsByLayer[layer].push(comp);
+    });
+
+    // Calculate incoming connections for each component (for ordering)
+    const incomingCount: Record<string, number> = {};
+    components.forEach(c => { incomingCount[c.id] = 0; });
+    connections.forEach(conn => {
+      if (incomingCount[conn.targetId] !== undefined) {
+        incomingCount[conn.targetId]++;
+      }
+    });
+
+    // Sort components within each layer by incoming connections (sources first)
+    Object.keys(componentsByLayer).forEach(layer => {
+      componentsByLayer[layer].sort((a, b) => {
+        const aIncoming = incomingCount[a.id] || 0;
+        const bIncoming = incomingCount[b.id] || 0;
+        return aIncoming - bIncoming;
+      });
+    });
+
+    // Layout parameters
+    const startX = 150;
+    const startY = 100;
+    const horizontalSpacing = COMPONENT_WIDTH + PADDING + 30; // Extra spacing
+    const verticalSpacing = COMPONENT_HEIGHT + PADDING + 50; // Extra vertical spacing
+
+    // Position components
+    const newComponents: SystemComponent[] = [];
+    let currentY = startY;
+    let maxComponentsInRow = 0;
+
+    // Get layers in order
+    const presentLayers = layerOrder.filter(layer => componentsByLayer[layer]?.length > 0);
+
+    presentLayers.forEach(layer => {
+      const layerComponents = componentsByLayer[layer];
+      if (!layerComponents || layerComponents.length === 0) return;
+
+      let currentX = startX;
+
+      // Center the row if there are fewer components than the max row
+      if (maxComponentsInRow > 0 && layerComponents.length < maxComponentsInRow) {
+        currentX = startX + ((maxComponentsInRow - layerComponents.length) * horizontalSpacing) / 2;
+      }
+
+      layerComponents.forEach((comp, idx) => {
+        newComponents.push({
+          ...comp,
+          x: currentX + (idx * horizontalSpacing),
+          y: currentY
+        });
+      });
+
+      // Track max components for centering
+      maxComponentsInRow = Math.max(maxComponentsInRow, layerComponents.length);
+      currentY += verticalSpacing;
+    });
+
+    // Handle any components not in layerOrder (shouldn't happen but just in case)
+    const processedIds = new Set(newComponents.map(c => c.id));
+    components.forEach(comp => {
+      if (!processedIds.has(comp.id)) {
+        newComponents.push({
+          ...comp,
+          x: startX,
+          y: currentY
+        });
+        currentY += verticalSpacing;
+      }
+    });
+
+    setComponents(newComponents);
+  }, [components, connections, handleSnapshot]);
 
   // Convert solution component to canvas component
   const solutionToCanvasComponent = (
@@ -586,6 +719,13 @@ const App: React.FC = () => {
       setSolutionIdMap({});
     } catch (error: any) {
       console.error("Failed to generate solution:", error);
+
+      // Check for service unavailable errors first (503/UNAVAILABLE)
+      if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try again in a moment.");
+        return;
+      }
+
       const userHasKey = getUserApiKey();
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
@@ -595,8 +735,6 @@ const App: React.FC = () => {
           setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
         }
         setForceOpenTutor(true);
-      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
-        showToast("The AI service is busy. Please try again in a moment.");
       } else {
         showToast("Unable to generate solution right now. Please try again.");
       }
@@ -709,6 +847,13 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Evaluation/Improvement error:", error);
+
+      // Check for service unavailable errors first (503/UNAVAILABLE)
+      if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
+        showToast("The AI service is busy. Please try again in a moment.");
+        return;
+      }
+
       const userHasKey = getUserApiKey();
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
@@ -718,8 +863,6 @@ const App: React.FC = () => {
           setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
         }
         setForceOpenTutor(true);
-      } else if (error?.error?.code === 503 || error?.error?.status === 'UNAVAILABLE') {
-        showToast("The AI service is busy. Please try again in a moment.");
       } else {
         showToast("Unable to process your design right now. Please try again.");
       }
@@ -751,6 +894,7 @@ const App: React.FC = () => {
         onEvaluate={handleEvaluate}
         onGetHint={handleGetHints}
         onAISolve={handleAISolve}
+        onAutoLayout={handleAutoLayout}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         isGettingHint={isGettingHint}
