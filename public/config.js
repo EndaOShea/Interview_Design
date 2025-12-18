@@ -1,7 +1,7 @@
 // This file is a placeholder for local development
-// In Docker production, this file is generated at runtime by docker-entrypoint.sh
-// with the actual GEMINI_API_KEY from environment variables
+// In Docker production, this file is overwritten at runtime by docker-entrypoint.sh
+// NOTE: No app-level API keys are used - users provide their own through the UI
 
 window.ENV = {
-  GEMINI_API_KEY: undefined
+  // No API keys - users must configure through the Settings modal
 };

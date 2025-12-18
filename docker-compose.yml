@@ -7,9 +7,7 @@ services:
     container_name: architectai-system-design
     ports:
       - "2350:2350"
-    environment:
-      # Runtime environment variable - NOT baked into image
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    # No environment variables needed - users provide API keys through the UI
     restart: unless-stopped
     networks:
       - architectai-network

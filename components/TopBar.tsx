@@ -1,6 +1,6 @@
 import React from 'react';
 import { Challenge } from '../types';
-import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown, LayoutGrid } from 'lucide-react';
+import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown, LayoutGrid, Settings } from 'lucide-react';
 import { DifficultyLevel } from '../services/gemini';
 
 interface TopBarProps {
@@ -10,6 +10,8 @@ interface TopBarProps {
   onGetHint: () => void;
   onAISolve: () => void;
   onAutoLayout: () => void;
+  onOpenSettings: () => void;
+  highlightSettings?: boolean;
   isGenerating: boolean;
   isEvaluating: boolean;
   isGettingHint: boolean;
@@ -34,6 +36,8 @@ const TopBar: React.FC<TopBarProps> = ({
   onGetHint,
   onAISolve,
   onAutoLayout,
+  onOpenSettings,
+  highlightSettings = false,
   isGenerating,
   isEvaluating,
   isGettingHint,
@@ -116,6 +120,18 @@ const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
+        <button
+          onClick={onOpenSettings}
+          className={`px-2 py-1.5 text-xs font-medium transition-all rounded-md ${
+            highlightSettings
+              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/50 animate-pulse'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title="AI Provider Settings"
+        >
+          <Settings size={13} />
+        </button>
+
         <button
           onClick={onClear}
           className="px-2 py-1.5 text-slate-400 hover:text-white text-xs font-medium transition-colors"

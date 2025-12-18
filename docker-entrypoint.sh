@@ -1,14 +1,14 @@
 #!/bin/sh
 set -e
 
-# Create runtime config file with environment variables
+# Create empty runtime config file (no app-level API keys)
 cat > /usr/share/nginx/html/config.js <<EOF
 window.ENV = {
-  GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+  // No app-level API keys - users provide their own through the UI
 };
 EOF
 
-echo "Runtime config created with API key status: $([ -n "$GEMINI_API_KEY" ] && echo 'SET' || echo 'NOT SET')"
+echo "Runtime config created - users must provide API keys through the UI"
 
 # Execute the CMD
 exec "$@"

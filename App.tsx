@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
 import TopBar from './components/TopBar';
@@ -8,9 +8,11 @@ import HintModal from './components/HintModal';
 import ComponentConfigDialog from './components/ComponentConfigDialog';
 import RequirementsPanel from './components/RequirementsPanel';
 import AITutor from './components/AITutor';
+import AISettings from './components/AISettings';
 import SolutionPlayer from './components/SolutionPlayer';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { generateChallenge, evaluateDesign, generateHints, generateSolution, improveSolution, ImprovementResult, DifficultyLevel, getUserApiKey } from './services/gemini';
+import { hasApiKey } from './services/ai-service';
 import { SystemComponent, Connection, ComponentType, Challenge, EvaluationResult, HintResult, SolutionResult, SolutionComponent, SolutionConnection } from './types';
 import { COMPONENT_SPECS } from './constants';
 
@@ -73,6 +75,11 @@ const App: React.FC = () => {
   const [forceOpenTutor, setForceOpenTutor] = useState(false);
   const [apiKeyNeededMessage, setApiKeyNeededMessage] = useState<string | null>(null);
 
+  // AI Settings Modal
+  const [showAISettings, setShowAISettings] = useState(false);
+  const [highlightSettings, setHighlightSettings] = useState(false);
+  const [hasClosedSettingsOnce, setHasClosedSettingsOnce] = useState(false);
+
   // Toast Notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -87,6 +94,22 @@ const App: React.FC = () => {
     componentType: null,
     draftComponent: null
   });
+
+  // Check if user has an API key on first load and show settings
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('has_visited');
+    const hasKey = hasApiKey();
+
+    if (!hasKey) {
+      // No API key configured - open settings immediately
+      setShowAISettings(true);
+      setApiKeyNeededMessage('Welcome! Please configure your AI provider and API key to get started.');
+
+      if (!hasVisited) {
+        localStorage.setItem('has_visited', 'true');
+      }
+    }
+  }, []);
 
   // Undo / History Logic
   const handleSnapshot = useCallback(() => {
@@ -201,23 +224,46 @@ const App: React.FC = () => {
 
   const handleGenerateChallenge = async (difficulty: DifficultyLevel) => {
     setIsGenerating(true);
+
+    // Clear everything BEFORE generating new challenge to avoid race conditions
+    setChallenge(null);
+    setComponents([]);
+    setConnections([]);
+    setHistory([]);
+
+    // Reset all evaluation state
+    setEvaluation(null);
+    setShowEvaluation(false);
+    setLastEvaluatedDesignHash(null);
+    setIsEvaluating(false);
+
+    // Reset all hint state
+    setHintResult(null);
+    setShowHint(false);
+    setIsGettingHint(false);
+
+    // Reset all solution state
+    setSolutionResult(null);
+    setShowSolutionPlayer(false);
+    setSolutionStep(-1);
+    setSolutionIdMap({});
+    setIsGeneratingSolution(false);
+    setSolutionEvaluationScore(null);
+
+    // Reset all improvement state
+    setImprovementResult(null);
+    setImprovementStep(0);
+    setIsImproving(false);
+    setIsEvaluatingForImprovement(false);
+
+    // Clear any API key error state
+    setApiKeyNeededMessage(null);
+    setForceOpenTutor(false);
+
     try {
+      // Now generate the new challenge
       const newChallenge = await generateChallenge(undefined, difficulty);
       setChallenge(newChallenge);
-      setEvaluation(null);
-      setHintResult(null);
-      // Reset solution state
-      setSolutionResult(null);
-      setShowSolutionPlayer(false);
-      setSolutionStep(-1);
-      setSolutionIdMap({});
-      setSolutionEvaluationScore(null);
-      setImprovementResult(null);
-      setImprovementStep(0);
-      setLastEvaluatedDesignHash(null);
-      // Clear any API key error state
-      setApiKeyNeededMessage(null);
-      setForceOpenTutor(false);
     } catch (error: any) {
       console.error("Challenge generation error:", error);
 
@@ -895,6 +941,8 @@ const App: React.FC = () => {
         onGetHint={handleGetHints}
         onAISolve={handleAISolve}
         onAutoLayout={handleAutoLayout}
+        onOpenSettings={() => setShowAISettings(true)}
+        highlightSettings={highlightSettings}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         isGettingHint={isGettingHint}
@@ -983,6 +1031,45 @@ const App: React.FC = () => {
         initialSubTypeId={configDialog.initialSubTypeId}
         onComplete={handleConfigComplete}
         onCancel={() => setConfigDialog({ isOpen: false, componentType: null, draftComponent: null })}
+      />
+
+      {/* AI Settings Modal */}
+      <AISettings
+        isOpen={showAISettings}
+        onClose={() => {
+          // Only allow closing if user has configured an API key
+          if (hasApiKey()) {
+            setShowAISettings(false);
+            setApiKeyNeededMessage(null);
+
+            // If closing for the first time after configuring key, highlight settings button
+            if (!hasClosedSettingsOnce) {
+              setHasClosedSettingsOnce(true);
+              setHighlightSettings(true);
+              showToast('You can change your API key anytime using the Settings button ⚙️', 'success');
+              // Remove highlight after 10 seconds
+              setTimeout(() => setHighlightSettings(false), 10000);
+            }
+          } else {
+            showToast('Please configure an API key to continue');
+          }
+        }}
+        onSave={() => {
+          // Close modal after saving if key is configured
+          if (hasApiKey()) {
+            setShowAISettings(false);
+            setApiKeyNeededMessage(null);
+
+            // If saving for the first time, highlight settings button
+            if (!hasClosedSettingsOnce) {
+              setHasClosedSettingsOnce(true);
+              setHighlightSettings(true);
+              showToast('API key saved! You can update it anytime using the Settings button ⚙️', 'success');
+              // Remove highlight after 10 seconds
+              setTimeout(() => setHighlightSettings(false), 10000);
+            }
+          }
+        }}
       />
 
       {/* Toast Notifications */}

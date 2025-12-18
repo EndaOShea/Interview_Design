@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Challenge, HintResult } from '../types';
-import { createTutorChat } from '../services/gemini';
+import { createTutorChat, hasApiKey, getCurrentProvider } from '../services/ai-service';
 import { COMPONENT_SPECS } from '../constants';
-import { encryptApiKey, decryptApiKey } from '../utils/crypto';
 import { Chat, GenerateContentResponse } from '@google/genai';
-import { MessageCircle, X, Send, Settings, Key, Bot, User, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { MessageCircle, X, Send, Settings2, Bot, User, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AITutorProps {
   challenge: Challenge | null;
@@ -21,51 +20,38 @@ interface Message {
 
 const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNeededMessage, onApiKeyReady }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [tempKey, setTempKey] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
+  const [hasConfiguredKey, setHasConfiguredKey] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Check if API key is configured (uses multi-provider system)
+  useEffect(() => {
+    setHasConfiguredKey(hasApiKey());
+  }, []);
 
   // Handle forceOpen prop
   useEffect(() => {
     if (forceOpen) {
       setIsOpen(true);
-      if (!apiKey || apiKeyNeededMessage) {
-        setShowSettings(true);
-      }
     }
-  }, [forceOpen, apiKey, apiKeyNeededMessage]);
+  }, [forceOpen]);
 
-  // Load API Key from local storage on mount
+  // Initialize Chat Session when Challenge/Hints change
   useEffect(() => {
-    const storedKey = localStorage.getItem('gemini_user_api_key');
-    if (storedKey) {
-      try {
-        const decrypted = decryptApiKey(storedKey);
-        if (decrypted) {
-          setApiKey(decrypted);
-        } else {
-          localStorage.removeItem('gemini_user_api_key');
-          setShowSettings(true);
-        }
-      } catch (e) {
-        console.error("Invalid key stored - clearing");
-        localStorage.removeItem('gemini_user_api_key');
-        setShowSettings(true);
-      }
-    } else {
-      setShowSettings(true);
+    // Check if user has configured an API key
+    if (!hasApiKey()) {
+      setHasConfiguredKey(false);
+      setChatSession(null);
+      return;
     }
-  }, []);
 
-  // Initialize Chat Session when Key or Challenge/Hints change
-  useEffect(() => {
-    if (apiKey && challenge) {
+    setHasConfiguredKey(true);
+
+    if (challenge) {
       // Generate Context about available tools
       const componentContext = Object.values(COMPONENT_SPECS).map(spec => {
         const subTypes = spec.subTypes?.map(s => `${s.label}`).join(', ');
@@ -74,33 +60,33 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
 
       const systemPrompt = `
         You are an expert System Design Tutor. Your goal is to help the user learn by guiding them through the current challenge.
-        
+
         CURRENT CHALLENGE:
         Title: ${challenge.title}
         Description: ${challenge.description}
         Requirements: ${challenge.requirements.join('; ')}
         Constraints: ${challenge.constraints.join('; ')}
-        
+
         ${hints ? `GENERATED HINTS CONTEXT:
         Strategy: ${hints.architectureStrategy}
         Recommended Components: ${hints.suggestedComponents.map(c => c.component).join(', ')}
         ` : ''}
-        
+
         AVAILABLE TOOLBOX & UI CONTEXT:
         The user is working in a drag-and-drop editor with the following capabilities:
-        
+
         1. **System Layers & Components** (Available in Sidebar):
         ${componentContext}
-        
+
         2. **Logic & Flow Items**:
            - Start, End, Process, Decision, Data I/O, Loop, Timer, Event.
-        
+
         3. **Bottom Toolbar Tools**:
            - Selection Tool (Move/Edit)
            - Connectors: Arrow (Directed), Line (Undirected), Loop (Self/Curved)
            - Annotations: Text, Rectangle, Circle
            - Pen (Freehand Drawing)
-        
+
         4. **Customization**:
            - Users can create "Custom Tools" in the sidebar if a specific technology is missing from the presets.
            - Users can configure specific technologies (e.g., choosing "PostgreSQL" for a generic "Relational DB" node).
@@ -114,14 +100,16 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
       `;
 
       try {
-        const session = createTutorChat(apiKey, systemPrompt);
+        // createTutorChat now uses the stored API key from multi-provider system
+        const session = createTutorChat('', systemPrompt);
         setChatSession(session);
         setMessages([{ role: 'model', text: `Hi! I'm your System Design Tutor. I can help you with the "${challenge.title}" challenge. Where would you like to start?` }]);
       } catch (error) {
         console.error("Failed to init chat", error);
+        setHasConfiguredKey(false);
       }
     }
-  }, [apiKey, challenge, hints]);
+  }, [challenge, hints]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -130,32 +118,6 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
   useEffect(() => {
     scrollToBottom();
   }, [messages, isOpen]);
-
-  const handleSaveKey = () => {
-    if (tempKey.trim()) {
-      const encrypted = encryptApiKey(tempKey.trim());
-      if (encrypted) {
-        setApiKey(tempKey.trim());
-        localStorage.setItem('gemini_user_api_key', encrypted);
-        setTempKey('');
-        setShowSettings(false);
-        // Notify parent that API key is now available
-        if (onApiKeyReady) {
-          onApiKeyReady();
-        }
-      } else {
-        console.error('Failed to encrypt API key');
-      }
-    }
-  };
-
-  const handleClearKey = () => {
-    setApiKey('');
-    localStorage.removeItem('gemini_user_api_key');
-    setChatSession(null);
-    setMessages([]);
-    setShowSettings(true);
-  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !chatSession) return;
@@ -209,14 +171,7 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button 
-              onClick={() => setShowSettings(!showSettings)}
-              className={`p-1.5 rounded-md transition-colors ${showSettings ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              title="Settings"
-            >
-              <Settings size={16} />
-            </button>
-            <button 
+            <button
               onClick={() => setIsOpen(false)}
               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
             >
@@ -226,59 +181,15 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
         </div>
 
         {/* Content Area */}
-        {showSettings || !apiKey ? (
+        {!hasConfiguredKey ? (
           <div className="flex-1 p-6 flex flex-col justify-center items-center bg-slate-900">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${apiKeyNeededMessage ? 'bg-amber-900/50' : 'bg-slate-800'}`}>
-              <Key size={24} className={apiKeyNeededMessage ? 'text-amber-400' : 'text-indigo-400'} />
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-indigo-900/50">
+              <Settings2 size={24} className="text-indigo-400" />
             </div>
-            <h4 className="text-white font-bold mb-2">
-              {apiKeyNeededMessage ? 'API Key Required' : 'Setup Tutor API Key'}
-            </h4>
-            {apiKeyNeededMessage && (
-              <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg px-3 py-2 mb-4">
-                <p className="text-xs text-amber-300 text-center leading-relaxed">
-                  {apiKeyNeededMessage}
-                </p>
-              </div>
-            )}
-            <p className="text-xs text-slate-400 text-center mb-6 leading-relaxed">
-              {apiKey
-                ? "Your API key will be used for all AI features."
-                : "Please provide your Google Gemini API Key. It will be stored locally in your browser."
-              }
+            <h4 className="text-white font-bold mb-2">API Key Required</h4>
+            <p className="text-xs text-slate-400 text-center mb-6 leading-relaxed max-w-xs">
+              Please configure your AI provider and API key using the Settings button (⚙️) in the top bar.
             </p>
-            
-            <div className="w-full space-y-3">
-              <input
-                type="password"
-                placeholder="Paste API Key here..."
-                value={tempKey}
-                onChange={(e) => setTempKey(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-              />
-              <button
-                onClick={handleSaveKey}
-                disabled={!tempKey.trim()}
-                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Save & Start Chatting
-              </button>
-              
-              {apiKey && (
-                 <button
-                  onClick={handleClearKey}
-                  className="w-full py-2 text-xs text-red-400 hover:text-red-300 transition-colors"
-                >
-                  Clear Saved Key
-                </button>
-              )}
-              
-              <div className="text-[10px] text-slate-600 text-center mt-4">
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline hover:text-indigo-400">Get an API Key</a>
-              </div>
-            </div>
           </div>
         ) : (
           <>
