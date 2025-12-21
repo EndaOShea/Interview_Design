@@ -3,11 +3,15 @@ import { Challenge } from '../types';
 import { ChevronDown, ChevronUp, FileText } from 'lucide-react';
 
 interface RequirementsPanelProps {
-  challenge: Challenge;
+  challenge: Challenge | null;
 }
 
 const RequirementsPanel: React.FC<RequirementsPanelProps> = ({ challenge }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  if (!challenge || !challenge.requirements || !challenge.constraints) {
+    return null;
+  }
 
   return (
     <div className="absolute top-4 right-4 z-10 flex flex-col items-end">

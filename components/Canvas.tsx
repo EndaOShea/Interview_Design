@@ -23,6 +23,17 @@ interface CanvasProps {
 const COMPONENT_WIDTH = 111;  // Reduced by 30% from 158
 const COMPONENT_HEIGHT = 63;  // Reduced by 30% from 90
 
+// Merged connection group for auto-layout
+interface MergedConnectionGroup {
+  originalIds: string[];
+  sources: string[];
+  targetId: string;
+  label: string;
+  mergePoint: {x: number, y: number};
+  color: string;
+  type: 'directed' | 'undirected' | 'loop';
+}
+
 const Canvas: React.FC<CanvasProps> = ({
   components,
   connections,
@@ -321,6 +332,102 @@ const Canvas: React.FC<CanvasProps> = ({
       
       return { x: center.x + xOffset, y: center.y + yOffset };
     }
+  };
+
+  // Detect and group connections that can be merged (same label, same target)
+  const detectMergeableConnections = (
+    connections: Connection[],
+    components: SystemComponent[]
+  ): { merged: MergedConnectionGroup[], unmerged: Connection[] } => {
+    // Filter out connections with empty labels or self-loops
+    const candidateConnections = connections.filter(
+      c => c.label && c.label.trim() !== '' && c.sourceId !== c.targetId
+    );
+
+    // Group by targetId + label + type
+    const groups = new Map<string, Connection[]>();
+    candidateConnections.forEach(conn => {
+      const key = `${conn.targetId}|||${conn.label}|||${conn.type || 'directed'}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(conn);
+    });
+
+    const merged: MergedConnectionGroup[] = [];
+    const unmerged: Connection[] = [];
+
+    // Process groups
+    groups.forEach((conns, key) => {
+      if (conns.length >= 2) {
+        // Merge this group
+        const targetId = conns[0].targetId;
+        const label = conns[0].label!;
+        const sources = conns.map(c => c.sourceId);
+        const mergePoint = calculateMergePoint(sources, targetId);
+
+        merged.push({
+          originalIds: conns.map(c => c.id),
+          sources,
+          targetId,
+          label,
+          mergePoint,
+          color: conns[0].color || '#000000',
+          type: conns[0].type || 'directed'
+        });
+      } else {
+        // Single connection, don't merge
+        unmerged.push(conns[0]);
+      }
+    });
+
+    // Add connections that weren't candidates (empty labels, self-loops)
+    connections.forEach(conn => {
+      if (!conn.label || conn.label.trim() === '' || conn.sourceId === conn.targetId) {
+        unmerged.push(conn);
+      }
+    });
+
+    return { merged, unmerged };
+  };
+
+  // Calculate merge point for grouped connections
+  const calculateMergePoint = (
+    sourceIds: string[],
+    targetId: string
+  ): {x: number, y: number} => {
+    // Get target center
+    const targetComp = components.find(c => c.id === targetId);
+    if (!targetComp) return { x: 0, y: 0 };
+
+    const targetDims = getDimensions(targetComp);
+    const targetCenter = {
+      x: targetComp.x + targetDims.w / 2,
+      y: targetComp.y + targetDims.h / 2
+    };
+
+    // Calculate centroid of all sources
+    let sourceCentroidX = 0;
+    let sourceCentroidY = 0;
+
+    sourceIds.forEach(srcId => {
+      const srcComp = components.find(c => c.id === srcId);
+      if (srcComp) {
+        const srcDims = getDimensions(srcComp);
+        sourceCentroidX += srcComp.x + srcDims.w / 2;
+        sourceCentroidY += srcComp.y + srcDims.h / 2;
+      }
+    });
+
+    sourceCentroidX /= sourceIds.length;
+    sourceCentroidY /= sourceIds.length;
+
+    // Position merge point at 65% along the path from source centroid to target
+    const t = 0.65;
+    return {
+      x: sourceCentroidX + (targetCenter.x - sourceCentroidX) * t,
+      y: sourceCentroidY + (targetCenter.y - sourceCentroidY) * t
+    };
   };
 
   // Zoom Handler
@@ -998,7 +1105,135 @@ const Canvas: React.FC<CanvasProps> = ({
             );
           })()}
 
-          {connections.map(conn => {
+          {(() => {
+            // Detect and separate merged vs unmerged connections
+            const { merged, unmerged } = useMemo(
+              () => detectMergeableConnections(connections, components),
+              [connections, components]
+            );
+
+            const offsetX = 5000;
+            const offsetY = 5000;
+
+            return (
+              <>
+                {/* Render merged connection groups */}
+                {merged.map(group => {
+                  const targetComp = components.find(c => c.id === group.targetId);
+                  if (!targetComp) return null;
+
+                  const targetDims = getDimensions(targetComp);
+                  const targetCenter = {
+                    x: targetComp.x + targetDims.w / 2,
+                    y: targetComp.y + targetDims.h / 2
+                  };
+
+                  const mergeX = group.mergePoint.x + offsetX;
+                  const mergeY = group.mergePoint.y + offsetY;
+
+                  // Calculate end point at target boundary
+                  const targetComp2 = components.find(c => c.id === group.targetId);
+                  const endPoint = targetComp2 ? getIntersection(group.targetId, group.mergePoint) : targetCenter;
+
+                  return (
+                    <g key={`merged-${group.originalIds.join('-')}`} className="merged-connection-group">
+                      {/* Individual source → merge point paths */}
+                      {group.sources.map((sourceId, idx) => {
+                        const sourceComp = components.find(c => c.id === sourceId);
+                        if (!sourceComp) return null;
+
+                        const sourceDims = getDimensions(sourceComp);
+                        const sourceCenter = {
+                          x: sourceComp.x + sourceDims.w / 2,
+                          y: sourceComp.y + sourceDims.h / 2
+                        };
+
+                        const startPoint = getIntersection(sourceId, group.mergePoint);
+
+                        return (
+                          <path
+                            key={`source-${sourceId}-${idx}`}
+                            d={`M ${startPoint.x + offsetX} ${startPoint.y + offsetY} L ${mergeX} ${mergeY}`}
+                            stroke={group.color}
+                            strokeWidth="2"
+                            fill="none"
+                            opacity="0.8"
+                            className="pointer-events-none"
+                          />
+                        );
+                      })}
+
+                      {/* Merge point → target path with arrowhead */}
+                      <path
+                        d={`M ${mergeX} ${mergeY} L ${endPoint.x + offsetX} ${endPoint.y + offsetY}`}
+                        stroke={group.color}
+                        strokeWidth="3"
+                        fill="none"
+                        markerEnd={group.type === 'directed' ? `url(#${getMarkerId(group.color)})` : undefined}
+                        className="pointer-events-none"
+                      />
+
+                      {/* Merge point marker (small circle) */}
+                      <circle
+                        cx={mergeX}
+                        cy={mergeY}
+                        r="5"
+                        fill={group.color}
+                        stroke="#ffffff"
+                        strokeWidth="2"
+                        className="pointer-events-none"
+                      />
+
+                      {/* Count badge label at merge point */}
+                      <g transform={`translate(${mergeX}, ${mergeY - 30})`}>
+                        <rect
+                          x={-group.label.length * 3 - 15}
+                          y={-14}
+                          width={group.label.length * 6 + 30}
+                          height={28}
+                          rx={14}
+                          fill="#ffffff"
+                          stroke={group.color}
+                          strokeWidth="2"
+                          filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))"
+                        />
+                        {/* Count badge circle */}
+                        <circle
+                          cx={-group.label.length * 3}
+                          cy={0}
+                          r={10}
+                          fill={group.color}
+                          stroke="#ffffff"
+                          strokeWidth="2"
+                        />
+                        <text
+                          x={-group.label.length * 3}
+                          y={4}
+                          textAnchor="middle"
+                          fill="#ffffff"
+                          fontSize="10px"
+                          fontWeight="bold"
+                        >
+                          {group.sources.length}
+                        </text>
+                        {/* Label text */}
+                        <text
+                          x={5}
+                          y={4}
+                          textAnchor="start"
+                          fill="#000000"
+                          fontSize="11px"
+                          fontWeight="600"
+                        >
+                          {group.label} ({group.sources.length}×)
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+
+                {/* Render unmerged connections (original logic) */}
+                {unmerged.map(conn => {
             const sourceComp = components.find(c => c.id === conn.sourceId);
             const sourceCenter = getCenter(conn.sourceId);
             const targetCenter = getCenter(conn.targetId);
@@ -1250,6 +1485,9 @@ const Canvas: React.FC<CanvasProps> = ({
               </g>
             );
           })}
+              </>
+            );
+          })()}
         </svg>
 
         {/* Components */}

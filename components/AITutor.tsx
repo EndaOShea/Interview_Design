@@ -51,7 +51,7 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
 
     setHasConfiguredKey(true);
 
-    if (challenge) {
+    if (challenge && challenge.title) {
       // Generate Context about available tools
       const componentContext = Object.values(COMPONENT_SPECS).map(spec => {
         const subTypes = spec.subTypes?.map(s => `${s.label}`).join(', ');
@@ -62,10 +62,10 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
         You are an expert System Design Tutor. Your goal is to help the user learn by guiding them through the current challenge.
 
         CURRENT CHALLENGE:
-        Title: ${challenge.title}
-        Description: ${challenge.description}
-        Requirements: ${challenge.requirements.join('; ')}
-        Constraints: ${challenge.constraints.join('; ')}
+        Title: ${challenge?.title || 'N/A'}
+        Description: ${challenge?.description || 'N/A'}
+        Requirements: ${challenge?.requirements?.join('; ') || 'None'}
+        Constraints: ${challenge?.constraints?.join('; ') || 'None'}
 
         ${hints ? `GENERATED HINTS CONTEXT:
         Strategy: ${hints.architectureStrategy}
@@ -103,7 +103,7 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
         // createTutorChat now uses the stored API key from multi-provider system
         const session = createTutorChat('', systemPrompt);
         setChatSession(session);
-        setMessages([{ role: 'model', text: `Hi! I'm your System Design Tutor. I can help you with the "${challenge.title}" challenge. Where would you like to start?` }]);
+        setMessages([{ role: 'model', text: `Hi! I'm your System Design Tutor. I can help you with the "${challenge?.title || 'current'}" challenge. Where would you like to start?` }]);
       } catch (error) {
         console.error("Failed to init chat", error);
         setHasConfiguredKey(false);

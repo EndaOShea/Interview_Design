@@ -583,7 +583,7 @@ const App: React.FC = () => {
     // Layout parameters
     const startX = 150;
     const startY = 100;
-    const horizontalSpacing = COMPONENT_WIDTH + PADDING + 30; // Extra spacing
+    const horizontalSpacing = COMPONENT_WIDTH + PADDING + 200; // Extra spacing for wider layout
     const verticalSpacing = COMPONENT_HEIGHT + PADDING + 50; // Extra vertical spacing
 
     // Position components

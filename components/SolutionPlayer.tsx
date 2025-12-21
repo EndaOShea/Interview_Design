@@ -42,6 +42,13 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
   const [showOverview, setShowOverview] = useState(true);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // Reset to overview when solution player opens or solution changes
+  useEffect(() => {
+    if (isOpen && solution) {
+      setShowOverview(true);
+    }
+  }, [isOpen, solution]);
+
   // Auto-scroll to current step
   useEffect(() => {
     if (contentRef.current && !showOverview) {
@@ -54,10 +61,16 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
 
   if (!isOpen || !solution) return null;
 
-  const totalSteps = solution.steps.length;
-  const progress = ((currentStep + 1) / totalSteps) * 100;
-  const currentStepData = solution.steps[currentStep];
+  const totalSteps = solution?.steps?.length || 0;
+  const progress = totalSteps > 0 ? ((currentStep + 1) / totalSteps) * 100 : 0;
+  const currentStepData = solution?.steps?.[currentStep];
   const isComplete = currentStep >= totalSteps - 1 && !showOverview;
+
+  // Guard against invalid currentStep only when trying to show step content
+  // Always allow rendering when showing overview
+  if (!showOverview && (!currentStepData || currentStep < 0 || currentStep >= totalSteps)) {
+    return null;
+  }
 
   const handleNext = () => {
     if (showOverview) {
@@ -119,7 +132,7 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
             </p>
 
             {/* Requirements Checklist */}
-            {challenge && (
+            {challenge && challenge.requirements && challenge.requirements.length > 0 && (
               <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
                 <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                   Requirements to Address
@@ -264,7 +277,7 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
             </p>
 
             {/* Requirements Addressed */}
-            {currentStepData.requirementsAddressed.length > 0 && challenge && (
+            {currentStepData.requirementsAddressed.length > 0 && challenge && challenge.requirements && (
               <div className="p-3 bg-green-900/20 border border-green-800/30 rounded-lg">
                 <div className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
@@ -274,7 +287,7 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
                   {currentStepData.requirementsAddressed.map(reqIdx => (
                     <li key={reqIdx} className="text-xs text-green-300 flex items-start gap-2">
                       <span className="text-green-500 font-mono">#{reqIdx}</span>
-                      <span>{challenge.requirements[reqIdx]}</span>
+                      <span>{challenge.requirements?.[reqIdx] || `Requirement #${reqIdx}`}</span>
                     </li>
                   ))}
                 </ul>
