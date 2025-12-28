@@ -15,6 +15,7 @@ import { generateChallenge, evaluateDesign, generateHints, generateSolution, imp
 import { hasApiKey } from './services/ai-service';
 import { SystemComponent, Connection, ComponentType, Challenge, EvaluationResult, HintResult, SolutionResult, SolutionComponent, SolutionConnection } from './types';
 import { COMPONENT_SPECS } from './constants';
+import * as analytics from './utils/analytics';
 
 export interface ViewState {
   x: number;
@@ -99,6 +100,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const hasVisited = localStorage.getItem('has_visited');
     const hasKey = hasApiKey();
+
+    // Track session start
+    analytics.trackSessionStart();
 
     if (!hasKey) {
       // No API key configured - open settings immediately
@@ -198,6 +202,9 @@ const App: React.FC = () => {
       // Save state before adding
       handleSnapshot();
       setComponents((prev) => [...prev, draft as SystemComponent]);
+
+      // Track component added
+      analytics.trackComponentAdded(type);
     }
   };
 
@@ -215,6 +222,9 @@ const App: React.FC = () => {
     handleSnapshot();
     setComponents(prev => [...prev, newComponent]);
     setConfigDialog({ isOpen: false, componentType: null, draftComponent: null });
+
+    // Track component added with tool name
+    analytics.trackComponentAdded(`${configDialog.componentType}:${tool}`);
   };
 
   const handleDragOver = (event: React.DragEvent) => {
@@ -264,7 +274,12 @@ const App: React.FC = () => {
       // Now generate the new challenge
       const newChallenge = await generateChallenge(undefined, difficulty);
       setChallenge(newChallenge);
+
+      // Track successful challenge generation
+      analytics.trackChallengeGenerated(difficulty);
     } catch (error: any) {
+      // Track error
+      analytics.trackError('challenge_generation', error?.message || 'Unknown error');
       console.error("Challenge generation error:", error);
 
       // Check for service unavailable errors first (503/UNAVAILABLE)
@@ -336,7 +351,11 @@ const App: React.FC = () => {
       setEvaluation(result);
       setLastEvaluatedDesignHash(currentHash);
       setShowEvaluation(true);
+
+      // Track successful evaluation
+      analytics.trackDesignEvaluated(result.score, components.length);
     } catch (error: any) {
+      analytics.trackError('design_evaluation', error?.message || 'Unknown error');
       console.error("Evaluation failed:", error);
 
       // Check for service unavailable errors first (503/UNAVAILABLE)
@@ -373,7 +392,11 @@ const App: React.FC = () => {
       const result = await generateHints(challenge);
       setHintResult(result);
       setShowHint(true);
+
+      // Track hints requested
+      analytics.trackHintsRequested();
     } catch (error: any) {
+      analytics.trackError('hints_generation', error?.message || 'Unknown error');
       console.error("Failed to get hints:", error);
 
       // Check for service unavailable errors first (503/UNAVAILABLE)
@@ -763,7 +786,11 @@ const App: React.FC = () => {
       setShowSolutionPlayer(true);
       setSolutionStep(-1); // Start at -1 so step 0 gets applied when walkthrough starts
       setSolutionIdMap({});
+
+      // Track solution viewed
+      analytics.trackSolutionViewed();
     } catch (error: any) {
+      analytics.trackError('solution_generation', error?.message || 'Unknown error');
       console.error("Failed to generate solution:", error);
 
       // Check for service unavailable errors first (503/UNAVAILABLE)

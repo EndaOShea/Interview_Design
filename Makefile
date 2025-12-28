@@ -50,7 +50,7 @@ dev-down:
 # Utility commands
 health:
 	@echo "Container Status:"
-	@docker ps --filter "name=architectai" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+	@docker ps --filter "name=systems-architect" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 # Aliases
 prod-build: build

@@ -2,7 +2,7 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# ArchitectAI - System Design Studio
+# Systems Architect - System Design Studio
 
 An interactive visual design tool for system design interview preparation, powered by Google Gemini AI.
 
@@ -35,7 +35,10 @@ View your app in AI Studio: https://ai.studio/apps/drive/1iYpyjJWfwrknbXcqSIgjbM
 
 ### Prerequisites
 - **Node.js** (v16 or higher)
-- **Google Gemini API Key** ([Get one here](https://aistudio.google.com/apikey))
+- **AI Provider API Key** (one of the following):
+  - [Google Gemini](https://aistudio.google.com/apikey)
+  - [OpenAI](https://platform.openai.com/api-keys)
+  - [Anthropic Claude](https://console.anthropic.com/settings/keys)
 
 ### Installation
 
@@ -50,19 +53,18 @@ View your app in AI Studio: https://ai.studio/apps/drive/1iYpyjJWfwrknbXcqSIgjbM
    npm install
    ```
 
-3. **Configure environment**
-
-   Create a `.env.local` file in the root directory:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
-
-4. **Run the development server**
+3. **Run the development server**
    ```bash
    npm run dev
    ```
 
    Open [http://localhost:3000](http://localhost:3000) in your browser
+
+4. **Configure your API key**
+   - Click the Settings button (gear icon) in the top bar
+   - Select your AI provider (Gemini, OpenAI, or Claude)
+   - Enter your API key
+   - Your key is encrypted and stored locally in your browser
 
 ### Build for Production
 
@@ -75,39 +77,29 @@ npm run preview
 
 ### Prerequisites
 - **Docker** and **Docker Compose** installed
-- **Google Gemini API Key** ([Get one here](https://aistudio.google.com/apikey))
 
 ### Production Deployment
 
-1. **Set up environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your GEMINI_API_KEY
-   ```
-
-   **Security Note**: The API key is injected at runtime, NOT baked into the Docker image. This means:
-   - The Docker image contains NO secrets and is safe to share
-   - You can use the same image across environments with different API keys
-   - Keys can be rotated without rebuilding the image
-
-2. **Build and run with Docker Compose**
+1. **Build and run with Docker Compose**
    ```bash
    docker-compose up -d
    ```
 
    The application will be available at **http://localhost:2350**
 
-3. **View logs**
+2. **View logs**
    ```bash
    docker-compose logs -f
    ```
 
-4. **Stop the application**
+3. **Stop the application**
    ```bash
    docker-compose down
    ```
 
-For detailed deployment instructions and troubleshooting, see [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
+**Security Note**: No server-side API keys are used. Users configure their own API keys through the Settings UI. Keys are encrypted and stored in the browser's localStorage.
+
+For detailed deployment instructions, see [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
 
 ### Development with Docker
 
@@ -123,14 +115,13 @@ Access at **http://localhost:2351**
 
 ```bash
 # Build the image
-docker build -t architectai:latest .
+docker build -t systems-architect:latest .
 
 # Run the container
 docker run -d \
   -p 2350:2350 \
-  -e GEMINI_API_KEY=your_key_here \
-  --name architectai \
-  architectai:latest
+  --name systems-architect \
+  systems-architect:latest
 ```
 
 ## How to Use
@@ -174,16 +165,50 @@ docker run -d \
 └── vite.config.ts          # Vite configuration
 ```
 
-## AI Tutor Setup
+## AI Provider Setup
 
-The AI Tutor requires a separate Gemini API key for privacy:
+Systems Architect supports multiple AI providers. Configure your preferred provider:
 
-1. Click the AI Tutor icon (bottom right)
-2. Click the settings gear icon
-3. Enter your personal Gemini API key
-4. Start chatting for real-time guidance
+1. Click the **Settings** button (gear icon) in the top bar
+2. Select your AI provider (Gemini, OpenAI, or Claude)
+3. Enter your API key
+4. Click **Test Connection** to verify
+5. Click **Save Settings**
 
-Your key is stored locally in your browser and never sent to any server except Google's Gemini API.
+Your key is encrypted and stored locally in your browser. It is only sent to the respective AI provider's API.
+
+## Analytics (Optional)
+
+Systems Architect supports Google Analytics 4 for tracking usage metrics. To enable:
+
+### Docker Deployment
+Set the `GA_MEASUREMENT_ID` environment variable:
+
+```bash
+GA_MEASUREMENT_ID=G-XXXXXXXXXX docker-compose up -d
+```
+
+Or add to your `.env` file:
+```env
+GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+### Local Development
+Edit `public/config.js` and set your measurement ID:
+```javascript
+window.ENV = {
+  GA_MEASUREMENT_ID: "G-XXXXXXXXXX"
+};
+```
+
+### Tracked Events
+- **Session start** - New user sessions with screen resolution
+- **Challenge generated** - When users generate new challenges (with difficulty)
+- **Design evaluated** - When users submit designs for AI evaluation (with score)
+- **Hints requested** - When users request AI hints
+- **Solution viewed** - When users view AI-generated solutions
+- **Component added** - When users add components to the canvas
+- **Provider configured** - When users configure their AI provider
 
 ## Documentation
 
@@ -194,9 +219,10 @@ Your key is stored locally in your browser and never sent to any server except G
 ## Security
 
 API keys are managed securely:
-- **Local Development**: Keys loaded from `.env.local` at build time
-- **Docker Production**: Keys injected at runtime via `docker-entrypoint.sh`
-- **No secrets in images**: Docker images are safe to share publicly
+- **User-provided keys only**: No server-side API keys are used
+- **Client-side encryption**: Keys are encrypted before storing in localStorage
+- **No secrets in code/images**: Docker images contain no API keys and are safe to share
+- **Direct API calls**: Keys are only sent to the respective AI provider (Google, OpenAI, or Anthropic)
 
 See [SECURITY.md](./SECURITY.md) for complete security documentation.
 

@@ -45,14 +45,6 @@ function getUserApiKey(provider: ProviderType): string | null {
     if (config && config.apiKeys[provider]) {
       return decryptApiKey(config.apiKeys[provider]!);
     }
-
-    // Fallback to legacy Gemini key if provider is Gemini
-    if (provider === 'gemini') {
-      const legacyKey = localStorage.getItem('gemini_user_api_key');
-      if (legacyKey) {
-        return decryptApiKey(legacyKey);
-      }
-    }
   } catch (e) {
     console.error(`Failed to get user API key for ${provider}:`, e);
   }

@@ -15,7 +15,7 @@ export const PROVIDER_CONFIGS: Record<ProviderType, ProviderConfig> = {
       },
       {
         id: 'gemini-1.5-flash',
-        name: 'Gemini 1.5 Flash (Fallback)',
+        name: 'Gemini 1.5 Flash',
         contextWindow: 1000000,
         costTier: 'free',
         supportsStructuredOutput: true

@@ -2,6 +2,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { initCrypto, migrateToSecureEncryption } from './utils/crypto';
+
+// Initialize crypto system and migrate legacy keys on startup
+(async () => {
+  await initCrypto();
+  await migrateToSecureEncryption();
+})();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

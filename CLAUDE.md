@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**ArchitectAI - System Design Studio** is a React-based visual design tool for system design interview preparation. It provides a drag-and-drop canvas for creating system architecture diagrams with AI-powered challenge generation, evaluation, and tutoring via Google Gemini.
+**Systems Architect - System Design Studio** is a React-based visual design tool for system design interview preparation. It provides a drag-and-drop canvas for creating system architecture diagrams with AI-powered challenge generation, evaluation, and tutoring via Google Gemini.
 
 ## Development Commands
 
@@ -17,12 +17,6 @@ npm install
 - `tailwind.config.js` - Tailwind configuration with custom colors and fonts
 - `postcss.config.js` - PostCSS configuration
 - `index.css` - Main stylesheet with Tailwind directives and custom styles
-
-### Environment Configuration
-Create a `.env.local` file in the root with:
-```
-GEMINI_API_KEY=your_gemini_api_key_here
-```
 
 ### Run Development Server
 ```bash
@@ -52,22 +46,18 @@ docker-compose down
 docker-compose -f docker-dev.yml up
 
 # Manual build
-docker build -t architectai:latest .
-docker run -d -p 2350:2350 -e GEMINI_API_KEY=your_key --name architectai architectai:latest
+docker build -t systems-architect:latest .
+docker run -d -p 2350:2350 --name systems-architect systems-architect:latest
 ```
 
 The Docker setup uses:
 - **Multi-stage build**: Builder stage (Node.js) + Production stage (Nginx Alpine)
 - **Nginx** serves the static build on port 2350
-- **Runtime config injection**: API key loaded at startup via `docker-entrypoint.sh`, NOT baked into image
 - **Health checks** ensure container availability
 - **Gzip compression** and security headers configured in nginx.conf
 - **Development mode**: Mounts source code for hot reload on port 2351
 
-**Security Note**: The API key is injected at runtime, not during build. This means:
-- The Docker image contains NO secrets and is safe to share
-- You can use the same image across environments with different API keys
-- Keys can be rotated by restarting the container with new env vars
+**Security Note**: No server-side API keys are used. Users must provide their own API keys through the Settings UI. Keys are encrypted using AES-GCM via the Web Crypto API before storage in localStorage.
 
 ## Architecture & Key Concepts
 
@@ -125,24 +115,34 @@ The canvas uses world coordinates with pan/zoom support:
 - Conversion: `worldX = (screenX - sidebarWidth - viewState.x) / viewState.zoom`
 - Sidebar width: 288px, TopBar height: ~64px
 
-### Gemini AI Integration
+### Multi-Provider AI Integration
 
-Located in `services/gemini.ts`:
+Located in `services/ai-service.ts` with provider implementations in `services/providers/`:
 
-**Three main AI functions:**
+**Supported Providers:**
+- Google Gemini (gemini.provider.ts)
+- OpenAI (openai.provider.ts)
+- Anthropic Claude (claude.provider.ts)
+
+**Core AI Functions:**
 1. `generateChallenge()` - Creates system design interview challenges with requirements and constraints
 2. `evaluateDesign()` - Scores user's design (0-100) with pros/cons/recommendations
 3. `generateHints()` - Provides starter suggestions and architecture strategy
+4. `generateSolution()` - Creates a model solution for the challenge
+5. `improveSolution()` - Suggests improvements to the current design
 
 **AI Tutor (AITutor.tsx):**
-- Real-time chat assistant using Gemini
-- Uses user's own API key (stored in localStorage, separate from app's key)
+- Real-time chat assistant
+- Uses user's own API key (stored encrypted in localStorage)
 - System prompt includes challenge context, available components, and hints
 - Chat session persists across messages
 
-**Environment Variable Mapping:**
-- `process.env.API_KEY` is set from `GEMINI_API_KEY` in vite.config.ts
-- This mapping is critical for the API to work
+**API Key Security:**
+- No server-side or environment API keys are used
+- Users must provide their own API keys via the Settings UI
+- Keys are encrypted using AES-GCM (Web Crypto API) before localStorage storage
+- Encryption keys are device-specific and auto-generated on first use
+- Legacy keys are automatically migrated to the new encryption format
 
 ### History/Undo System
 
@@ -174,8 +174,8 @@ Color picker applies colors to selected components or new connections.
 ├── App.tsx                 # Main application component & state
 ├── types.ts                # TypeScript interfaces
 ├── constants.tsx           # 16-layer component definitions + icons
-├── index.tsx              # React entry point
-├── vite.config.ts         # Vite config (env vars, aliases)
+├── index.tsx              # React entry point (initializes crypto)
+├── vite.config.ts         # Vite config (aliases)
 ├── tsconfig.json          # TypeScript config
 │
 ├── components/
@@ -187,10 +187,22 @@ Color picker applies colors to selected components or new connections.
 │   ├── EvaluationModal.tsx     # Show AI evaluation results
 │   ├── HintModal.tsx           # Show AI hints
 │   ├── ComponentConfigDialog.tsx # Subtype & tool selection
-│   └── AITutor.tsx             # Chat interface with Gemini
+│   ├── AITutor.tsx             # Chat interface with AI
+│   └── AISettings.tsx          # AI provider & API key configuration
 │
-└── services/
-    └── gemini.ts           # Gemini API integration
+├── services/
+│   ├── ai-service.ts           # Multi-provider AI service (main entry)
+│   ├── gemini.ts               # Legacy wrapper (delegates to ai-service)
+│   ├── provider-config.ts      # Provider & model configurations
+│   └── providers/
+│       ├── ai-provider.interface.ts  # Provider interface definition
+│       ├── gemini.provider.ts        # Google Gemini implementation
+│       ├── openai.provider.ts        # OpenAI implementation
+│       └── claude.provider.ts        # Anthropic Claude implementation
+│
+└── utils/
+    ├── crypto.ts               # AES-GCM encryption for API keys
+    └── migration.ts            # Data migration utilities
 ```
 
 ## Common Patterns
@@ -247,8 +259,10 @@ Use appropriate mouse event handlers and state flags to add new interactions.
 ## Testing Notes
 
 This project does not currently have automated tests. When testing manually:
-- Test with and without GEMINI_API_KEY set
+- Test with and without user API key configured
+- Test all three providers (Gemini, OpenAI, Claude) if possible
+- Verify API key encryption works (check localStorage for encrypted values)
 - Verify undo/redo after each operation type
 - Test pan/zoom at different scales
 - Verify component config dialog for components with subtypes
-- Test AI Tutor with custom API key
+- Test AI Tutor chat functionality

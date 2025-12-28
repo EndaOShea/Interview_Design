@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ArchitectAI - System Design Studio</title>
+    <title>Systems Architect - System Design Studio</title>
 
     <!-- Favicons -->
     <link rel="icon" type="image/x-icon" href="/static/favicon_io/favicon.ico">
@@ -16,6 +16,31 @@
 
   <!-- Runtime configuration (injected by Docker at startup) -->
   <script src="/config.js"></script>
+
+  <!-- Google Analytics 4 -->
+  <script>
+    // Load GA4 after config.js to get the measurement ID
+    window.addEventListener('DOMContentLoaded', function() {
+      var gaId = window.ENV && window.ENV.GA_MEASUREMENT_ID;
+      if (gaId) {
+        // Load gtag.js
+        var script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+        document.head.appendChild(script);
+
+        // Initialize gtag
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        window.gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', gaId, {
+          send_page_view: true,
+          cookie_flags: 'SameSite=None;Secure'
+        });
+      }
+    });
+  </script>
 
   <script type="importmap">
 {

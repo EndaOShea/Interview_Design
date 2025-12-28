@@ -1,14 +1,19 @@
 #!/bin/sh
 set -e
 
-# Create empty runtime config file (no app-level API keys)
+# Create runtime config file with analytics configuration
 cat > /usr/share/nginx/html/config.js <<EOF
 window.ENV = {
-  // No app-level API keys - users provide their own through the UI
+  // Google Analytics 4 Measurement ID (optional)
+  GA_MEASUREMENT_ID: "${GA_MEASUREMENT_ID:-}"
 };
 EOF
 
-echo "Runtime config created - users must provide API keys through the UI"
+if [ -n "$GA_MEASUREMENT_ID" ]; then
+  echo "Runtime config created with Google Analytics: $GA_MEASUREMENT_ID"
+else
+  echo "Runtime config created (no analytics configured)"
+fi
 
 # Execute the CMD
 exec "$@"

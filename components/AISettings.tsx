@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, AlertCircle, Key } from 'lucide-react';
 import { ProviderType } from '../services/providers/ai-provider.interface';
 import { PROVIDER_CONFIGS, getDefaultModel } from '../services/provider-config';
-import { encryptApiKey, decryptApiKey, encryptConfig, decryptConfig } from '../utils/crypto';
+import { encryptApiKey, decryptApiKey } from '../utils/crypto';
 import { StoredAIConfig, testConnection } from '../services/ai-service';
+import { trackProviderConfigured } from '../utils/analytics';
 
 interface AISettingsProps {
   isOpen: boolean;
@@ -62,15 +63,7 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
         };
         setApiKeys(decryptedKeys);
       } else {
-        // Check for legacy Gemini key
-        const legacyKey = localStorage.getItem('gemini_user_api_key');
-        if (legacyKey) {
-          const decrypted = decryptApiKey(legacyKey);
-          if (decrypted) {
-            setApiKeys(prev => ({ ...prev, gemini: decrypted }));
-          }
-        }
-        // Set default model
+        // Set default model for new users
         setSelectedModel(getDefaultModel('gemini'));
       }
       setHasChanges(false);
@@ -147,6 +140,9 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
       localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
       setHasChanges(false);
 
+      // Track provider configuration
+      trackProviderConfigured(selectedProvider);
+
       if (onSave) {
         onSave();
       }
@@ -191,7 +187,7 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
           {/* Welcome Banner for First-Time Users */}
           {!apiKeys[selectedProvider] && (
             <div className="p-4 bg-indigo-900/30 border border-indigo-500/50 rounded-lg">
-              <h3 className="text-sm font-semibold text-indigo-300 mb-2">👋 Welcome to ArchitectAI!</h3>
+              <h3 className="text-sm font-semibold text-indigo-300 mb-2">👋 Welcome to Systems Architect!</h3>
               <p className="text-xs text-slate-300">
                 To get started, please select an AI provider and enter your API key below.
                 Your key will be stored securely in your browser and never sent to our servers.

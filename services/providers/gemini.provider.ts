@@ -654,7 +654,7 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
       if (response.text) {
         return {
           success: true,
-          message: 'Connection successful! Gemini API key is valid.'
+          message: `Connection successful! Using model: ${this.model}`
         };
       }
 
@@ -662,18 +662,28 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
         success: false,
         message: 'Unexpected response from Gemini API'
       };
-    } catch (error) {
+    } catch (error: any) {
+      // Log full error for debugging
+      console.error('Gemini test connection error:', {
+        message: error?.message,
+        status: error?.status,
+        statusText: error?.statusText,
+        code: error?.code,
+        model: this.model,
+        fullError: error
+      });
+
       const mappedError = this.mapError(error);
       return {
         success: false,
-        message: mappedError.message
+        message: `${mappedError.message} (Model: ${this.model})`
       };
     }
   }
 
   mapError(error: any): ProviderError {
     const errorMessage = error?.message || String(error);
-    const errorCode = error?.code || error?.status || 'UNKNOWN';
+    const errorCode = error?.code || error?.status || error?.httpStatus || 'UNKNOWN';
 
     if (errorMessage === 'NO_API_KEY' || errorCode === 'NO_API_KEY') {
       return {
@@ -688,6 +698,32 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
       return {
         code: 'INVALID_API_KEY',
         message: 'Invalid Gemini API key',
+        originalError: error,
+        isAuthError: true
+      };
+    }
+
+    if (errorCode === 403) {
+      // 403 can mean several things
+      if (errorMessage.includes('API_KEY_INVALID') || errorMessage.includes('invalid')) {
+        return {
+          code: 'INVALID_API_KEY',
+          message: 'Invalid or restricted API key. Check your key in Google Cloud Console.',
+          originalError: error,
+          isAuthError: true
+        };
+      }
+      if (errorMessage.includes('PERMISSION_DENIED')) {
+        return {
+          code: 'PERMISSION_DENIED',
+          message: 'Permission denied. Enable the Generative Language API in Google Cloud Console.',
+          originalError: error,
+          isAuthError: true
+        };
+      }
+      return {
+        code: 'FORBIDDEN',
+        message: 'Access forbidden. Check API key restrictions (referrer/IP) in Google Cloud Console.',
         originalError: error,
         isAuthError: true
       };

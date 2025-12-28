@@ -1,16 +1,17 @@
 services:
-  architectai:
+  systems-architect:
     build:
       context: .
       dockerfile: Dockerfile
-      # No build args needed - API key loaded at runtime
-    container_name: architectai-system-design
+    container_name: systems-architect
     ports:
       - "2350:2350"
-    # No environment variables needed - users provide API keys through the UI
+    environment:
+      # Google Analytics 4 Measurement ID (optional)
+      - GA_MEASUREMENT_ID=${GA_MEASUREMENT_ID:-}
     restart: unless-stopped
     networks:
-      - architectai-network
+      - systems-architect-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2350/"]
       interval: 30s
@@ -19,5 +20,5 @@ services:
       start_period: 40s
 
 networks:
-  architectai-network:
+  systems-architect-network:
     driver: bridge

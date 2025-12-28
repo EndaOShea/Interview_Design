@@ -91,9 +91,9 @@ const Sidebar: React.FC = () => {
           <div>
             <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <span className="bg-blue-600 w-1.5 h-5 rounded-sm"></span>
-              ArchitectAI
+              Systems Architect
             </h1>
-            <p className="text-[10px] text-slate-400 mt-0.5">System Design Studio</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Design Studio</p>
           </div>
           <input
             type="color"
