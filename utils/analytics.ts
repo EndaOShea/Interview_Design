@@ -134,11 +134,12 @@ export function trackDesignExported(format: string): void {
 
 /**
  * Track errors for debugging
+ * NOTE: Error messages are NOT sent to prevent PII leakage
  */
 export function trackError(errorType: string, errorMessage: string): void {
   trackEvent('error_occurred', {
     error_type: errorType,
-    error_message: errorMessage.substring(0, 100), // Truncate long messages
+    // Do not send error_message to prevent PII leakage
     event_category: 'error'
   });
 }

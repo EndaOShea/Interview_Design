@@ -36,6 +36,7 @@
         gtag('js', new Date());
         gtag('config', gaId, {
           send_page_view: true,
+          anonymize_ip: true,
           cookie_flags: 'SameSite=None;Secure'
         });
       }
