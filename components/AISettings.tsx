@@ -160,8 +160,23 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
 
   const handleClear = (provider: ProviderType) => {
     setApiKeys(prev => ({ ...prev, [provider]: '' }));
-    setHasChanges(true);
+    setHasChanges(false);
     setTestResult(null);
+
+    // Immediately remove from localStorage
+    try {
+      const stored = localStorage.getItem(AI_CONFIG_KEY);
+      if (stored) {
+        const config: StoredAIConfig = JSON.parse(stored);
+        if (config.apiKeys) {
+          delete config.apiKeys[provider];
+          localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+          window.dispatchEvent(new Event('ai-config-updated'));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to clear API key from storage:', e);
+    }
   };
 
   if (!isOpen) return null;
