@@ -74,6 +74,7 @@ const App: React.FC = () => {
   const [highlightSettings, setHighlightSettings] = useState(false);
   const [hasClosedSettingsOnce, setHasClosedSettingsOnce] = useState(false);
   const [aiConfigVersion, setAiConfigVersion] = useState(0);
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(hasApiKey);
 
   // Toast Notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -1108,6 +1109,7 @@ const App: React.FC = () => {
         onAutoLayout={handleAutoLayout}
         onOpenSettings={() => setShowAISettings(true)}
         highlightSettings={highlightSettings}
+        hasApiKey={apiKeyConfigured}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         isGettingHint={isGettingHint}
@@ -1190,39 +1192,28 @@ const App: React.FC = () => {
       <AISettings
         isOpen={showAISettings}
         onClose={() => {
-          // Only allow closing if user has configured an API key
-          if (hasApiKey()) {
-            setShowAISettings(false);
-            // removed 
-            setAiConfigVersion(v => v + 1);
+          setShowAISettings(false);
+          setAiConfigVersion(v => v + 1);
+          setApiKeyConfigured(hasApiKey());
 
-            // If closing for the first time after configuring key, highlight settings button
-            if (!hasClosedSettingsOnce) {
-              setHasClosedSettingsOnce(true);
-              setHighlightSettings(true);
-              showToast('You can change your API key anytime using the Settings button ⚙️', 'success');
-              // Remove highlight after 10 seconds
-              setTimeout(() => setHighlightSettings(false), 10000);
-            }
-          } else {
-            showToast('Please configure an API key to continue');
+          // If closing for the first time after configuring key, highlight settings button
+          if (hasApiKey() && !hasClosedSettingsOnce) {
+            setHasClosedSettingsOnce(true);
+            setHighlightSettings(true);
+            showToast('You can change your API key anytime using the Settings button ⚙️', 'success');
+            setTimeout(() => setHighlightSettings(false), 10000);
           }
         }}
         onSave={() => {
-          // Close modal after saving if key is configured
-          if (hasApiKey()) {
-            setShowAISettings(false);
-            // removed 
-            setAiConfigVersion(v => v + 1);
+          setShowAISettings(false);
+          setAiConfigVersion(v => v + 1);
+          setApiKeyConfigured(hasApiKey());
 
-            // If saving for the first time, highlight settings button
-            if (!hasClosedSettingsOnce) {
-              setHasClosedSettingsOnce(true);
-              setHighlightSettings(true);
-              showToast('API key saved! You can update it anytime using the Settings button ⚙️', 'success');
-              // Remove highlight after 10 seconds
-              setTimeout(() => setHighlightSettings(false), 10000);
-            }
+          if (!hasClosedSettingsOnce) {
+            setHasClosedSettingsOnce(true);
+            setHighlightSettings(true);
+            showToast('API key saved! You can update it anytime using the Settings button ⚙️', 'success');
+            setTimeout(() => setHighlightSettings(false), 10000);
           }
         }}
       />

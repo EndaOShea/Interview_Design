@@ -15,6 +15,7 @@ interface TopBarProps {
   onAutoLayout: () => void;
   onOpenSettings: () => void;
   highlightSettings?: boolean;
+  hasApiKey: boolean;
   isGenerating: boolean;
   isEvaluating: boolean;
   isGettingHint: boolean;
@@ -44,6 +45,7 @@ const TopBar: React.FC<TopBarProps> = ({
   onAutoLayout,
   onOpenSettings,
   highlightSettings = false,
+  hasApiKey,
   isGenerating,
   isEvaluating,
   isGettingHint,
@@ -64,7 +66,8 @@ const TopBar: React.FC<TopBarProps> = ({
           <div className="flex">
             <button
               onClick={() => onGenerateChallenge(selectedDifficulty)}
-              disabled={isGenerating}
+              disabled={isGenerating || !hasApiKey}
+              title={!hasApiKey ? 'Configure an API key in Settings to generate challenges' : undefined}
               className={`flex items-center gap-2 px-3 py-1.5 ${difficultyColors[selectedDifficulty]} text-white rounded-l-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg`}
             >
               {isGenerating ? (
@@ -78,7 +81,7 @@ const TopBar: React.FC<TopBarProps> = ({
             </button>
             <button
               onClick={() => setShowDifficultyMenu(!showDifficultyMenu)}
-              disabled={isGenerating}
+              disabled={isGenerating || !hasApiKey}
               className={`flex items-center px-1.5 py-1.5 ${difficultyColors[selectedDifficulty]} text-white rounded-r-md border-l border-white/20 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <ChevronDown size={13} />
