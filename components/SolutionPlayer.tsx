@@ -23,6 +23,7 @@ interface SolutionPlayerProps {
   isEvaluating?: boolean;
   evaluationScore?: number | null;
   hasAppliedSolution?: boolean;
+  embedded?: boolean;
 }
 
 const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
@@ -36,7 +37,8 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
   onComplete,
   isEvaluating = false,
   evaluationScore = null,
-  hasAppliedSolution = false
+  hasAppliedSolution = false,
+  embedded = false,
 }) => {
   const [showOverview, setShowOverview] = useState(true);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -85,21 +87,20 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
     onReset();
   };
 
-  return (
-    <div className="fixed bottom-[130px] right-4 w-[336px] max-h-[70vh] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-900/50 to-blue-900/50 border-b border-slate-700">
-        <div className="flex items-center gap-2">
-          <Lightbulb className="w-5 h-5 text-yellow-400" />
-          <span className="font-semibold text-white">AI Solution Walkthrough</span>
+  const inner = (
+    <>
+      {/* Header — only shown when not embedded (CanvasHub provides its own header) */}
+      {!embedded && (
+        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-900/50 to-blue-900/50 border-b border-slate-700 shrink-0">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 text-yellow-400" />
+            <span className="font-semibold text-white">AI Solution Walkthrough</span>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 hover:bg-slate-700 rounded-lg transition-colors"
-        >
-          <X className="w-5 h-5 text-slate-400" />
-        </button>
-      </div>
+      )}
 
       {/* Progress Bar */}
       {!showOverview && (
@@ -342,7 +343,7 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
 
       {/* Controls - only show Next button when not in overview */}
       {!showOverview && (
-        <div className="flex items-center justify-end px-4 py-3 bg-slate-800/50 border-t border-slate-700">
+        <div className="flex items-center justify-end px-4 py-3 bg-slate-800/50 border-t border-slate-700 shrink-0">
           <button
             onClick={handleNext}
             disabled={isComplete}
@@ -353,6 +354,16 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
           </button>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col h-full min-h-0">{inner}</div>;
+  }
+
+  return (
+    <div className="fixed bottom-[200px] right-4 w-[336px] max-h-[50vh] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden">
+      {inner}
     </div>
   );
 };

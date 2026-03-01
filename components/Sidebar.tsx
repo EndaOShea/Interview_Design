@@ -86,27 +86,33 @@ const Sidebar: React.FC = () => {
 
   return (
     <div className="w-56 bg-slate-900 border-r border-slate-800 flex flex-col h-full shrink-0 z-10 shadow-xl overflow-hidden">
-      <div className="p-3 border-b border-slate-800">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-              <span className="bg-blue-600 w-1.5 h-5 rounded-sm"></span>
-              Systems Architect
-            </h1>
-            <p className="text-[10px] text-slate-400 mt-0.5">Design Studio</p>
+      <div className="px-3 pt-3 pb-3 border-b border-slate-800/80">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Logo mark */}
+            <div className="flex-shrink-0 w-7 h-7 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-900/40">
+              <span className="text-[11px] font-black text-white tracking-tight leading-none">SA</span>
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-[13px] font-semibold text-slate-100 tracking-tight leading-tight truncate">
+                Systems Architect
+              </h1>
+              <p className="text-[10px] text-slate-500 leading-tight mt-px">Design Studio</p>
+            </div>
           </div>
-          <input
-            type="color"
-            value={globalColor}
-            onChange={(e) => setGlobalColor(e.target.value)}
-            className="w-8 h-8 rounded-lg cursor-pointer border-2 border-slate-700 hover:border-blue-500 transition-colors"
-            style={{
-              WebkitAppearance: 'none',
-              appearance: 'none',
-              backgroundColor: globalColor
-            }}
-            title="Choose component color"
-          />
+          {/* Color picker */}
+          <div className="flex-shrink-0 relative group" title="Component color">
+            <input
+              type="color"
+              value={globalColor}
+              onChange={(e) => setGlobalColor(e.target.value)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+            <div
+              className="w-6 h-6 rounded-md border border-white/10 shadow-sm group-hover:ring-2 group-hover:ring-blue-500/60 transition-all"
+              style={{ backgroundColor: globalColor }}
+            />
+          </div>
         </div>
       </div>
 

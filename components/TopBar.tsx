@@ -1,6 +1,6 @@
 import React from 'react';
 import { Challenge } from '../types';
-import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown, LayoutGrid } from 'lucide-react';
+import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown, LayoutGrid, RefreshCw } from 'lucide-react';
 import { DifficultyLevel } from '../services/gemini';
 import ProviderBadge from './ProviderBadge';
 
@@ -9,7 +9,9 @@ interface TopBarProps {
   onGenerateChallenge: (difficulty: DifficultyLevel) => void;
   onEvaluate: () => void;
   onGetHint: () => void;
+  onRegenHint: () => void;
   onAISolve: () => void;
+  onRegenSolution: () => void;
   onAutoLayout: () => void;
   onOpenSettings: () => void;
   highlightSettings?: boolean;
@@ -36,7 +38,9 @@ const TopBar: React.FC<TopBarProps> = ({
   onGenerateChallenge,
   onEvaluate,
   onGetHint,
+  onRegenHint,
   onAISolve,
+  onRegenSolution,
   onAutoLayout,
   onOpenSettings,
   highlightSettings = false,
@@ -148,45 +152,71 @@ const TopBar: React.FC<TopBarProps> = ({
           <span className="hidden sm:inline">Auto-Layout</span>
         </button>
 
-        <button
-          onClick={onGetHint}
-          disabled={isGettingHint || !challenge}
-          className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-            ${hasHints
-              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/50 hover:bg-yellow-500/20'
-              : 'bg-slate-800 hover:bg-slate-700 text-yellow-400 border-slate-700'
-            }`}
-          title={hasHints ? "Show cached hints" : "Get AI Hints"}
-        >
-           {isGettingHint ? (
-            <span className="animate-pulse">Asking...</span>
-           ) : (
-            <>
-              <Lightbulb size={13} className={hasHints ? "fill-current" : ""} />
-              <span className="hidden sm:inline">{hasHints ? 'Show Hints' : 'Hints'}</span>
-            </>
-           )}
-        </button>
-
-        <button
-          onClick={onAISolve}
-          disabled={isGeneratingSolution || !challenge}
-          className={`flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-            ${hasSolution
-              ? 'bg-purple-500/10 text-purple-400 border-purple-500/50 hover:bg-purple-500/20'
-              : 'bg-slate-800 hover:bg-slate-700 text-purple-400 border-slate-700'
-            }`}
-          title={hasSolution ? "Show AI Solution" : "Generate AI Solution"}
-        >
-          {isGeneratingSolution ? (
-            <span className="animate-pulse">Solving...</span>
-          ) : (
-            <>
-              <Wand2 size={13} className={hasSolution ? "fill-current" : ""} />
-              <span className="hidden sm:inline">{hasSolution ? 'Show Solution' : 'Solve'}</span>
-            </>
+        <div className="flex items-center">
+          <button
+            onClick={onGetHint}
+            disabled={isGettingHint || !challenge}
+            className={`flex items-center gap-2 px-3 py-1.5 border text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+              ${hasHints ? 'rounded-l-md border-r-0' : 'rounded-md'}
+              ${hasHints
+                ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/50 hover:bg-yellow-500/20'
+                : 'bg-slate-800 hover:bg-slate-700 text-yellow-400 border-slate-700'
+              }`}
+            title={hasHints ? "Show hints" : "Get AI Hints"}
+          >
+            {isGettingHint ? (
+              <span className="animate-pulse">Asking...</span>
+            ) : (
+              <>
+                <Lightbulb size={13} className={hasHints ? "fill-current" : ""} />
+                <span className="hidden sm:inline">{hasHints ? 'Show Hints' : 'Hints'}</span>
+              </>
+            )}
+          </button>
+          {hasHints && (
+            <button
+              onClick={onRegenHint}
+              disabled={isGettingHint || !challenge}
+              className="flex items-center px-2 py-1.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/50 rounded-r-md hover:bg-yellow-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Regenerate hints with current model"
+            >
+              <RefreshCw size={12} />
+            </button>
           )}
-        </button>
+        </div>
+
+        <div className="flex items-center">
+          <button
+            onClick={onAISolve}
+            disabled={isGeneratingSolution || !challenge}
+            className={`flex items-center gap-2 px-3 py-1.5 border text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+              ${hasSolution ? 'rounded-l-md border-r-0' : 'rounded-md'}
+              ${hasSolution
+                ? 'bg-purple-500/10 text-purple-400 border-purple-500/50 hover:bg-purple-500/20'
+                : 'bg-slate-800 hover:bg-slate-700 text-purple-400 border-slate-700'
+              }`}
+            title={hasSolution ? "Show AI Solution" : "Generate AI Solution"}
+          >
+            {isGeneratingSolution ? (
+              <span className="animate-pulse">Solving...</span>
+            ) : (
+              <>
+                <Wand2 size={13} className={hasSolution ? "fill-current" : ""} />
+                <span className="hidden sm:inline">{hasSolution ? 'Show Solution' : 'Solve'}</span>
+              </>
+            )}
+          </button>
+          {hasSolution && (
+            <button
+              onClick={onRegenSolution}
+              disabled={isGeneratingSolution || !challenge}
+              className="flex items-center px-2 py-1.5 bg-purple-500/10 text-purple-400 border border-purple-500/50 rounded-r-md hover:bg-purple-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Regenerate solution with current model"
+            >
+              <RefreshCw size={12} />
+            </button>
+          )}
+        </div>
 
         <button
           onClick={onEvaluate}

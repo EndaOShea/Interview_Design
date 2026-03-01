@@ -71,6 +71,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const [preMarqueeSelection, setPreMarqueeSelection] = useState<string[]>([]); // Selection before marquee
   const [draggingWaypoint, setDraggingWaypoint] = useState<{connectionId: string, waypointIndex: number, startX: number, startY: number} | null>(null);
   const [draggingLabel, setDraggingLabel] = useState<{connectionId: string, startX: number, startY: number, lineStart: {x:number,y:number}, lineEnd: {x:number,y:number}, lineLen: number, currentT: number} | null>(null);
+  const [hoveredMergeGroup, setHoveredMergeGroup] = useState<MergedConnectionGroup | null>(null);
 
   // Resize State
   const [resizing, setResizing] = useState<{
@@ -1067,6 +1068,12 @@ const Canvas: React.FC<CanvasProps> = ({
 
   const getMarkerId = (color: string) => `arrowhead-${color.replace('#', '')}`;
 
+  // Component-level merge computation — used both in SVG and for HTML hit areas
+  const { merged: mergedGroups, unmerged: unmergedConnections } = useMemo(
+    () => detectMergeableConnections(connections, components),
+    [connections, components]
+  );
+
   return (
     <div
       ref={canvasRef}
@@ -1129,11 +1136,8 @@ const Canvas: React.FC<CanvasProps> = ({
           })()}
 
           {(() => {
-            // Detect and separate merged vs unmerged connections
-            const { merged, unmerged } = useMemo(
-              () => detectMergeableConnections(connections, components),
-              [connections, components]
-            );
+            const merged = mergedGroups;
+            const unmerged = unmergedConnections;
 
             const offsetX = 5000;
             const offsetY = 5000;
@@ -1934,6 +1938,86 @@ const Canvas: React.FC<CanvasProps> = ({
           />
         )}
       </div>
+
+      {/* Merged-connection badge hit areas (HTML, screen-space) */}
+      {activeTool === 'select' && mergedGroups.map(group => {
+        const screenX = group.mergePoint.x * viewState.zoom + viewState.x;
+        const screenY = (group.mergePoint.y - 30) * viewState.zoom + viewState.y;
+        const badgeW = (group.label.length * 6 + 30) * viewState.zoom;
+        const badgeH = 28 * viewState.zoom;
+        return (
+          <div
+            key={`merge-hit-${group.originalIds.join('-')}`}
+            style={{
+              position: 'absolute',
+              left: screenX - badgeW / 2,
+              top: screenY - badgeH / 2,
+              width: badgeW,
+              height: badgeH,
+              cursor: 'help',
+              zIndex: 30,
+            }}
+            onMouseEnter={() => setHoveredMergeGroup(group)}
+            onMouseLeave={() => setHoveredMergeGroup(null)}
+            onMouseDown={e => e.stopPropagation()}
+          />
+        );
+      })}
+
+      {/* Merged-connection tooltip */}
+      {hoveredMergeGroup && (() => {
+        const group = hoveredMergeGroup;
+        const screenX = group.mergePoint.x * viewState.zoom + viewState.x;
+        const screenY = (group.mergePoint.y - 30) * viewState.zoom + viewState.y;
+        const sourceNames = group.sources.map(sid => {
+          const c = components.find(comp => comp.id === sid);
+          return c ? (c.customLabel || c.label || sid) : sid;
+        });
+        const targetComp = components.find(c => c.id === group.targetId);
+        const targetName = targetComp ? (targetComp.customLabel || targetComp.label || group.targetId) : group.targetId;
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: screenX,
+              top: screenY - 14 * viewState.zoom - 8,
+              transform: 'translate(-50%, -100%)',
+              zIndex: 200,
+              pointerEvents: 'none',
+            }}
+            className="bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[180px] max-w-[260px]"
+          >
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
+              Connection Group
+            </div>
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                style={{ backgroundColor: group.color }}
+              >
+                {group.sources.length}
+              </div>
+              <span className="font-semibold text-sm text-slate-800 leading-tight">{group.label}</span>
+            </div>
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1.5">From</div>
+            <ul className="space-y-1 mb-3">
+              {sourceNames.map((name, i) => (
+                <li key={i} className="flex items-center gap-1.5 text-xs text-slate-700">
+                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: group.color }} />
+                  <span className="truncate">{name}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-slate-100 pt-2">
+              <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">To</div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0" />
+                <span className="truncate">{targetName}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Minimap */}
       {(() => {

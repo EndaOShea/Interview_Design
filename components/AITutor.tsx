@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Challenge, HintResult } from '../types';
+import { Challenge, HintResult, SystemComponent, Connection } from '../types';
 import { createTutorChat, hasApiKey, getCurrentProvider, getStoredConfig } from '../services/ai-service';
 import { ChatSession } from '../services/providers/ai-provider.interface';
 import { PROVIDER_CONFIGS } from '../services/provider-config';
@@ -12,6 +12,9 @@ interface AITutorProps {
   forceOpen?: boolean;
   apiKeyNeededMessage?: string | null;
   onApiKeyReady?: () => void;
+  configVersion?: number;
+  components?: SystemComponent[];
+  connections?: Connection[];
 }
 
 interface Message {
@@ -19,7 +22,7 @@ interface Message {
   text: string;
 }
 
-const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNeededMessage, onApiKeyReady }) => {
+const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNeededMessage, onApiKeyReady, configVersion, components = [], connections = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -29,11 +32,6 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Check if API key is configured (uses multi-provider system)
-  useEffect(() => {
-    setHasConfiguredKey(hasApiKey());
-  }, []);
-
   // Handle forceOpen prop
   useEffect(() => {
     if (forceOpen) {
@@ -41,16 +39,16 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
     }
   }, [forceOpen]);
 
-  // Initialize Chat Session when Challenge/Hints change
+  // Initialize Chat Session when Challenge/Hints change, or when API key is configured
   useEffect(() => {
-    // Check if user has configured an API key
-    if (!hasApiKey()) {
-      setHasConfiguredKey(false);
+    // Re-check API key whenever challenge, hints, or configVersion changes
+    const keyPresent = hasApiKey();
+    setHasConfiguredKey(keyPresent);
+
+    if (!keyPresent) {
       setChatSession(null);
       return;
     }
-
-    setHasConfiguredKey(true);
 
     if (challenge && challenge.title) {
       // Generate Context about available tools
@@ -59,60 +57,38 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
         return `- ${spec.label}: ${spec.description}${subTypes ? ` (Includes: ${subTypes})` : ''}`;
       }).join('\n');
 
-      const systemPrompt = `
-        You are an expert System Design Tutor. Your goal is to help the user learn by guiding them through the current challenge.
+      const systemPrompt = `You are a focused system design coach. Be direct, brief, and actionable — like a trainer standing next to the user.
 
-        CURRENT CHALLENGE:
-        Title: ${challenge?.title || 'N/A'}
-        Description: ${challenge?.description || 'N/A'}
-        Requirements: ${challenge?.requirements?.join('; ') || 'None'}
-        Constraints: ${challenge?.constraints?.join('; ') || 'None'}
+CHALLENGE: ${challenge?.title || 'N/A'}
+Requirements: ${challenge?.requirements?.join('; ') || 'None'}
+Constraints: ${challenge?.constraints?.join('; ') || 'None'}
+${hints ? `\nArchitecture strategy: ${hints.architectureStrategy}` : ''}
 
-        ${hints ? `GENERATED HINTS CONTEXT:
-        Strategy: ${hints.architectureStrategy}
-        Recommended Components: ${hints.suggestedComponents.map(c => c.component).join(', ')}
-        ` : ''}
+AVAILABLE COMPONENTS (sidebar): ${componentContext}
 
-        AVAILABLE TOOLBOX & UI CONTEXT:
-        The user is working in a drag-and-drop editor with the following capabilities:
-
-        1. **System Layers & Components** (Available in Sidebar):
-        ${componentContext}
-
-        2. **Logic & Flow Items**:
-           - Start, End, Process, Decision, Data I/O, Loop, Timer, Event.
-
-        3. **Bottom Toolbar Tools**:
-           - Selection Tool (Move/Edit)
-           - Connectors: Arrow (Directed), Line (Undirected), Loop (Self/Curved)
-           - Annotations: Text, Rectangle, Circle
-           - Pen (Freehand Drawing)
-
-        4. **Customization**:
-           - Users can create "Custom Tools" in the sidebar if a specific technology is missing from the presets.
-           - Users can configure specific technologies (e.g., choosing "PostgreSQL" for a generic "Relational DB" node).
-
-        GUIDELINES:
-        1. Be helpful, encouraging, and Socratic. Don't just give the answer; ask leading questions.
-        2. Keep answers concise (max 3-4 sentences) unless asked for details.
-        3. If the user asks about specific technologies, explain trade-offs (e.g., SQL vs NoSQL).
-        4. Focus on the requirements of the current challenge.
-        5. When suggesting components, refer to the names listed in the Toolbox so the user can find them.
-      `;
+RESPONSE RULES — follow these strictly:
+1. Answer ONLY what was asked. Do not recap the challenge, summarise what they've done, or explain the full solution.
+2. Each reply must be 1–3 sentences max unless the user explicitly asks for more detail.
+3. If the canvas is empty or incomplete, tell the user exactly ONE next component to add and why — nothing more.
+4. If the user asks about a specific component or decision, answer that question only.
+5. Never give a full architecture walkthrough unprompted.
+6. Refer to components by their sidebar names so the user can find them.
+7. If the user is on the right track, confirm it in one sentence and give the next nudge.
+8. Use plain language. No bullet-point essays. No preamble.`;
 
       (async () => {
         try {
           // createTutorChat uses the stored API key from multi-provider system
           const session = await createTutorChat('', systemPrompt);
           setChatSession(session);
-          setMessages([{ role: 'model', text: `Hi! I'm your System Design Tutor. I can help you with the "${challenge?.title || 'current'}" challenge. Where would you like to start?` }]);
+          setMessages([{ role: 'model', text: `Ready. What's your first question, or just start building and ask me when you're stuck.` }]);
         } catch (error) {
           console.error("Failed to init chat", error);
           setHasConfiguredKey(false);
         }
       })();
     }
-  }, [challenge, hints]);
+  }, [challenge, hints, configVersion]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -121,6 +97,32 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
   useEffect(() => {
     scrollToBottom();
   }, [messages, isOpen]);
+
+  const buildGraphContext = (): string => {
+    if (components.length === 0) return '';
+
+    const compLines = components
+      .filter(c => !['Rectangle', 'Circle', 'Freehand', 'Text'].includes(c.type))
+      .map(c => {
+        const name = c.customLabel || c.label || c.type;
+        const detail = c.tool ? ` (${c.tool})` : '';
+        return `  • ${name}${detail} [${c.type}]`;
+      });
+
+    const connLines = connections.map(conn => {
+      const src = components.find(c => c.id === conn.sourceId);
+      const tgt = components.find(c => c.id === conn.targetId);
+      const srcName = src ? (src.customLabel || src.label || src.type) : conn.sourceId;
+      const tgtName = tgt ? (tgt.customLabel || tgt.label || tgt.type) : conn.targetId;
+      const label = conn.label ? ` "${conn.label}"` : '';
+      return `  • ${srcName} →${label} ${tgtName}`;
+    });
+
+    const parts = [`[Current canvas — ${components.length} component(s)]`];
+    if (compLines.length) parts.push('Components:\n' + compLines.join('\n'));
+    if (connLines.length) parts.push('Connections:\n' + connLines.join('\n'));
+    return parts.join('\n') + '\n\n';
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !chatSession) return;
@@ -131,7 +133,9 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
     setIsLoading(true);
 
     try {
-      const result = await chatSession.sendMessage(userMsg);
+      const graphContext = buildGraphContext();
+      const fullMessage = graphContext ? `${graphContext}User question: ${userMsg}` : userMsg;
+      const result = await chatSession.sendMessage(fullMessage);
       if (result.text) {
         setMessages(prev => [...prev, { role: 'model', text: result.text }]);
       }

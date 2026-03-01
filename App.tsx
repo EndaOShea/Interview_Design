@@ -4,12 +4,9 @@ import Canvas from './components/Canvas';
 import TopBar from './components/TopBar';
 import BottomToolbar, { ToolType } from './components/BottomToolbar';
 import EvaluationModal from './components/EvaluationModal';
-import HintModal from './components/HintModal';
 import ComponentConfigDialog from './components/ComponentConfigDialog';
-import RequirementsPanel from './components/RequirementsPanel';
-import AITutor from './components/AITutor';
 import AISettings from './components/AISettings';
-import SolutionPlayer from './components/SolutionPlayer';
+import CanvasHub, { HubPanel } from './components/CanvasHub';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { generateChallenge, evaluateDesign, generateHints, generateSolution, improveSolution, ImprovementResult, DifficultyLevel, getUserApiKey } from './services/gemini';
 import { hasApiKey } from './services/ai-service';
@@ -48,15 +45,11 @@ const App: React.FC = () => {
   const [isGettingHint, setIsGettingHint] = useState(false);
   
   const [showEvaluation, setShowEvaluation] = useState(false);
-  const [showHint, setShowHint] = useState(false);
-  const [showChallengeExpanded, setShowChallengeExpanded] = useState(false);
-  const [requirementsCollapsed, setRequirementsCollapsed] = useState(false);
   const [lastEvaluatedDesignHash, setLastEvaluatedDesignHash] = useState<string | null>(null);
 
   // Solution Player State
   const [solutionResult, setSolutionResult] = useState<SolutionResult | null>(null);
   const [isGeneratingSolution, setIsGeneratingSolution] = useState(false);
-  const [showSolutionPlayer, setShowSolutionPlayer] = useState(false);
   const [solutionStep, setSolutionStep] = useState(-1); // Start at -1 so step 0 gets applied on first walkthrough
   const [solutionIdMap, setSolutionIdMap] = useState<Record<string, string>>({}); // Maps solution IDs to canvas IDs
 
@@ -73,14 +66,14 @@ const App: React.FC = () => {
   // Difficulty Selection
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('Medium');
 
-  // AI Tutor control state (for API key prompting)
-  const [forceOpenTutor, setForceOpenTutor] = useState(false);
-  const [apiKeyNeededMessage, setApiKeyNeededMessage] = useState<string | null>(null);
+  // Canvas Hub — drives which panel opens automatically
+  const [hubRequest, setHubRequest] = useState<{ panel: HubPanel; version: number } | null>(null);
 
   // AI Settings Modal
   const [showAISettings, setShowAISettings] = useState(false);
   const [highlightSettings, setHighlightSettings] = useState(false);
   const [hasClosedSettingsOnce, setHasClosedSettingsOnce] = useState(false);
+  const [aiConfigVersion, setAiConfigVersion] = useState(0);
 
   // Toast Notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -125,7 +118,7 @@ const App: React.FC = () => {
     if (!hasKey) {
       // No API key configured - open settings immediately
       setShowAISettings(true);
-      setApiKeyNeededMessage('Welcome! Please configure your AI provider and API key to get started.');
+      // removed 
 
       if (!hasVisited) {
         localStorage.setItem('has_visited', 'true');
@@ -267,12 +260,10 @@ const App: React.FC = () => {
 
     // Reset all hint state
     setHintResult(null);
-    setShowHint(false);
     setIsGettingHint(false);
 
     // Reset all solution state
     setSolutionResult(null);
-    setShowSolutionPlayer(false);
     setSolutionStep(-1);
     setSolutionIdMap({});
     setIsGeneratingSolution(false);
@@ -284,8 +275,8 @@ const App: React.FC = () => {
     setIsEvaluatingForImprovement(false);
 
     // Clear any API key error state
-    setApiKeyNeededMessage(null);
-    setForceOpenTutor(false);
+    // removed 
+    // removed 
 
     try {
       // Now generate the new challenge
@@ -310,24 +301,24 @@ const App: React.FC = () => {
       if (error?.message === 'NO_API_KEY' || error?.status === 401 || error?.status === 403 || error?.error?.code === 429 || error?.status === 429) {
         if (userHasKey) {
           if (error?.error?.code === 429 || error?.status === 429) {
-            setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used for all AI features.");
+            // removed 
           } else {
-            setApiKeyNeededMessage("The app's API key is unavailable. Your saved API key will be used for all AI features.");
+            // removed 
           }
         } else {
           if (error?.error?.code === 429 || error?.status === 429) {
-            setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+            // removed 
           } else {
-            setApiKeyNeededMessage("No API key configured. Please enter your Google Gemini API key to use AI features.");
+            // removed 
           }
         }
-        setForceOpenTutor(true);
+        setHubRequest({ panel: 'tutor', version: Date.now() }); // open hub tutor 
       } else {
         // Other error - show user-friendly message
         showToast("Unable to generate challenge. Please try again.");
         if (!userHasKey) {
-          setApiKeyNeededMessage("AI service error. Please provide your own API key to continue.");
-          setForceOpenTutor(true);
+          // removed 
+          setHubRequest({ panel: 'tutor', version: Date.now() }); // open hub tutor 
         }
       }
     } finally {
@@ -335,12 +326,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Callback when user provides API key through AI Tutor
-  const handleApiKeyReady = () => {
-    setApiKeyNeededMessage(null);
-    setForceOpenTutor(false);
-    // Optionally auto-retry the last action
-  };
 
   // Create a simple hash of the design to detect changes
   const getDesignHash = () => {
@@ -385,11 +370,11 @@ const App: React.FC = () => {
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
         if (userHasKey) {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+          // removed 
         } else {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+          // removed 
         }
-        setForceOpenTutor(true);
+        setHubRequest({ panel: 'tutor', version: Date.now() }); // open hub tutor 
       } else {
         showToast("Unable to evaluate your design right now. Please try again.");
       }
@@ -398,17 +383,56 @@ const App: React.FC = () => {
     }
   };
 
+  const handleRegenHints = async () => {
+    if (!challenge) return;
+    setHintResult(null);
+    setIsGettingHint(true);
+    try {
+      const result = await generateHints(challenge);
+      setHintResult(result);
+      setHubRequest({ panel: 'hints', version: Date.now() });
+    } catch (error: any) {
+      showToast("Failed to regenerate hints. Please try again.");
+      console.error("Failed to regen hints:", error);
+    } finally {
+      setIsGettingHint(false);
+    }
+  };
+
+  const handleRegenSolution = async () => {
+    if (!challenge) return;
+    setSolutionResult(null);
+    setSolutionStep(-1);
+    setSolutionIdMap({});
+    setSolutionEvaluationScore(null);
+    // Clear canvas, keeping only Start and End nodes
+    handleSnapshot();
+    setComponents(prev => prev.filter(c => c.type === 'Start' || c.type === 'End'));
+    setConnections([]);
+    setIsGeneratingSolution(true);
+    try {
+      const result = await generateSolution(challenge, hintResult);
+      setSolutionResult(result);
+      setHubRequest({ panel: 'solution', version: Date.now() });
+    } catch (error: any) {
+      showToast("Failed to regenerate solution. Please try again.");
+      console.error("Failed to regen solution:", error);
+    } finally {
+      setIsGeneratingSolution(false);
+    }
+  };
+
   const handleGetHints = async () => {
     if (!challenge) return;
     if (hintResult) {
-      setShowHint(true);
+      setHubRequest({ panel: 'hints', version: Date.now() });
       return;
     }
     setIsGettingHint(true);
     try {
       const result = await generateHints(challenge);
       setHintResult(result);
-      setShowHint(true);
+      setHubRequest({ panel: 'hints', version: Date.now() });
 
       // Track hints requested
       analytics.trackHintsRequested();
@@ -426,11 +450,11 @@ const App: React.FC = () => {
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
         if (userHasKey) {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+          // removed 
         } else {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+          // removed 
         }
-        setForceOpenTutor(true);
+        setHubRequest({ panel: 'tutor', version: Date.now() }); // open hub tutor 
       } else {
         showToast("Unable to generate hints right now. Please try again.");
       }
@@ -697,7 +721,7 @@ const App: React.FC = () => {
     }
 
     // ── Label collision resolution (straight lines, no waypoints) ────────────
-    const LABEL_PERP = 22;
+    const BASE_PERP  = 36;  // base perpendicular offset from line
     const LABEL_HALF_H = 14;
     const placedLabels: { x: number; y: number; halfW: number }[] = [];
 
@@ -715,37 +739,45 @@ const App: React.FC = () => {
       const lineLen = Math.sqrt((ex - sx) ** 2 + (ey - sy) ** 2);
       const labelHalfW = Math.max(32, conn.label.length * 4.5 + 12);
 
-      let perpX = 0, perpY = -LABEL_PERP;
+      // Unit perpendicular vector (always pointing upward/left)
+      let ux = 0, uy = -1;
       if (lineLen > 0) {
-        const vx = ex - sx, vy = ey - sy;
-        perpX = (-vy / lineLen) * LABEL_PERP;
-        perpY =  (vx / lineLen) * LABEL_PERP;
-        if (perpY > 0) { perpX = -perpX; perpY = -perpY; }
+        const vx = (ex - sx) / lineLen, vy = (ey - sy) / lineLen;
+        ux = -vy; uy = vx;
+        if (uy > 0) { ux = -ux; uy = -uy; }
       }
 
-      const candidates = [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75];
-      for (const t of candidates) {
-        const ancX = sx + (ex - sx) * t;
-        const ancY = sy + (ey - sy) * t;
-        const lblX = ancX + perpX, lblY = ancY + perpY;
+      // Try t positions × perp scale factors — covers source/target and all other components
+      const tValues   = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8];
+      const perpScales = [1, 2, 3, 4];
 
-        const compOverlap = layoutComps.some(comp => {
-          if (comp.id === conn.sourceId || comp.id === conn.targetId) return false;
-          const hw = (comp.width  || COMPONENT_WIDTH)  / 2 + labelHalfW;
-          const hh = (comp.height || COMPONENT_HEIGHT) / 2 + LABEL_HALF_H;
-          return Math.abs(comp.x - lblX) < hw && Math.abs(comp.y - lblY) < hh;
-        });
-        const lblOverlap = placedLabels.some(pl =>
-          Math.abs(pl.x - lblX) < pl.halfW + labelHalfW && Math.abs(pl.y - lblY) < LABEL_HALF_H * 2
-        );
-        if (!compOverlap && !lblOverlap) {
-          placedLabels.push({ x: lblX, y: lblY, halfW: labelHalfW });
-          return { ...base, labelT: t };
+      for (const scale of perpScales) {
+        const px = ux * BASE_PERP * scale, py = uy * BASE_PERP * scale;
+        for (const t of tValues) {
+          const ancX = sx + (ex - sx) * t;
+          const ancY = sy + (ey - sy) * t;
+          const lblX = ancX + px, lblY = ancY + py;
+
+          // Check against ALL components (including source & target — labels must not land on nodes)
+          const compOverlap = layoutComps.some(comp => {
+            const hw = (comp.width  || COMPONENT_WIDTH)  / 2 + labelHalfW + 8;
+            const hh = (comp.height || COMPONENT_HEIGHT) / 2 + LABEL_HALF_H + 8;
+            return Math.abs(comp.x - lblX) < hw && Math.abs(comp.y - lblY) < hh;
+          });
+          const lblOverlap = placedLabels.some(pl =>
+            Math.abs(pl.x - lblX) < pl.halfW + labelHalfW && Math.abs(pl.y - lblY) < LABEL_HALF_H * 2
+          );
+          if (!compOverlap && !lblOverlap) {
+            placedLabels.push({ x: lblX, y: lblY, halfW: labelHalfW });
+            return { ...base, labelT: t };
+          }
         }
       }
 
-      const ancX = sx + (ex - sx) * 0.5, ancY = sy + (ey - sy) * 0.5;
-      placedLabels.push({ x: ancX + perpX, y: ancY + perpY, halfW: labelHalfW });
+      // Fallback: push label far perpendicular at midpoint
+      const fallbackX = sx + (ex - sx) * 0.5 + ux * BASE_PERP * 5;
+      const fallbackY = sy + (ey - sy) * 0.5 + uy * BASE_PERP * 5;
+      placedLabels.push({ x: fallbackX, y: fallbackY, halfW: labelHalfW });
       return { ...base, labelT: 0.5 };
     });
 
@@ -844,8 +876,7 @@ const App: React.FC = () => {
 
     // If we already have a solution, just show the player
     if (solutionResult) {
-      setShowSolutionPlayer(true);
-      setRequirementsCollapsed(true);
+      setHubRequest({ panel: 'solution', version: Date.now() });
       return;
     }
 
@@ -853,8 +884,7 @@ const App: React.FC = () => {
     try {
       const result = await generateSolution(challenge, hintResult);
       setSolutionResult(result);
-      setShowSolutionPlayer(true);
-      setRequirementsCollapsed(true);
+      setHubRequest({ panel: 'solution', version: Date.now() });
       setSolutionStep(-1); // Start at -1 so step 0 gets applied when walkthrough starts
       setSolutionIdMap({});
 
@@ -874,11 +904,11 @@ const App: React.FC = () => {
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
         if (userHasKey) {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+          // removed 
         } else {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+          // removed 
         }
-        setForceOpenTutor(true);
+        setHubRequest({ panel: 'tutor', version: Date.now() }); // open hub tutor 
       } else {
         showToast("Unable to generate solution right now. Please try again.");
       }
@@ -900,8 +930,16 @@ const App: React.FC = () => {
       const newIdMap = { ...solutionIdMap };
       const addedComps: SystemComponent[] = [];
       step.components.forEach(solComp => {
-        // Deduplicate: if a component with the same label or tool already exists, reuse it
         const allOnCanvas = [...components, ...addedComps];
+        // For Start/End nodes: only one of each is allowed — always reuse the existing one
+        if (solComp.type === 'Start' || solComp.type === 'End') {
+          const existingByType = allOnCanvas.find(c => c.type === solComp.type);
+          if (existingByType) {
+            newIdMap[solComp.id] = existingByType.id;
+            return;
+          }
+        }
+        // Deduplicate: if a component with the same label or tool already exists, reuse it
         const existing = allOnCanvas.find(c =>
           (c.label && solComp.label && c.label.toLowerCase() === solComp.label.toLowerCase()) ||
           (c.tool  && solComp.tool  && c.tool.toLowerCase()  === solComp.tool.toLowerCase())
@@ -926,7 +964,7 @@ const App: React.FC = () => {
       const allConns = [...connections, ...addedConns];
 
       // Ensure every leaf node (no outgoing connections) is connected to the End node
-      const endNode = allComps.find(c => c.type === ComponentType.FLOW_END);
+      const endNode   = allComps.find(c => c.type === ComponentType.FLOW_END);
       const startNode = allComps.find(c => c.type === ComponentType.FLOW_START);
       if (endNode) {
         const outgoingIds = new Set(allConns.map(c => c.sourceId));
@@ -934,7 +972,6 @@ const App: React.FC = () => {
           if (comp.id === endNode.id) return;
           if (startNode && comp.id === startNode.id) return;
           if (outgoingIds.has(comp.id)) return;
-          // Already connected to End?
           if (allConns.some(c => c.sourceId === comp.id && c.targetId === endNode.id)) return;
           allConns.push({
             id: `auto-end-${comp.id}`,
@@ -945,6 +982,24 @@ const App: React.FC = () => {
             color: '#475569'
           });
         });
+      }
+      // Ensure Start node always has at least one outgoing connection
+      if (startNode && !allConns.some(c => c.sourceId === startNode.id)) {
+        const incomingIds = new Set(allConns.map(c => c.targetId));
+        // Prefer a node with no incoming edges (true entry point), fall back to first non-Start/End
+        const entryNode =
+          allComps.find(c => c.id !== startNode.id && c.type !== ComponentType.FLOW_END && !incomingIds.has(c.id)) ||
+          allComps.find(c => c.id !== startNode.id && c.type !== ComponentType.FLOW_END);
+        if (entryNode) {
+          allConns.push({
+            id: `auto-start-${entryNode.id}`,
+            sourceId: startNode.id,
+            targetId: entryNode.id,
+            label: 'initiates',
+            type: 'directed',
+            color: '#475569'
+          });
+        }
       }
       const { layoutComps, layoutConns } = computeAutoLayout(allComps, allConns);
 
@@ -1012,11 +1067,11 @@ const App: React.FC = () => {
       if (error?.error?.code === 429 || error?.status === 429) {
         // Quota exceeded - prompt for user's API key
         if (userHasKey) {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Your saved API key will be used.");
+          // removed 
         } else {
-          setApiKeyNeededMessage("The app's API key has exceeded its quota. Please enter your Google Gemini API key to continue.");
+          // removed 
         }
-        setForceOpenTutor(true);
+        setHubRequest({ panel: 'tutor', version: Date.now() }); // open hub tutor 
       } else {
         showToast("Unable to process your design right now. Please try again.");
       }
@@ -1047,7 +1102,9 @@ const App: React.FC = () => {
         onGenerateChallenge={handleGenerateChallenge}
         onEvaluate={handleEvaluate}
         onGetHint={handleGetHints}
+        onRegenHint={handleRegenHints}
         onAISolve={handleAISolve}
+        onRegenSolution={handleRegenSolution}
         onAutoLayout={handleAutoLayout}
         onOpenSettings={() => setShowAISettings(true)}
         highlightSettings={highlightSettings}
@@ -1060,7 +1117,7 @@ const App: React.FC = () => {
         onClear={handleClearBoard}
         selectedDifficulty={selectedDifficulty}
         onDifficultyChange={setSelectedDifficulty}
-        onExpandChallenge={() => setShowChallengeExpanded(true)}
+        onExpandChallenge={() => setHubRequest({ panel: 'requirements', version: Date.now() })}
       />
       
       <div className="flex flex-1 overflow-hidden relative">
@@ -1093,39 +1150,23 @@ const App: React.FC = () => {
           canUndo={history.length > 0}
         />
         
-        {/* Requirements Panel */}
-        {challenge && (
-          <RequirementsPanel
-            challenge={challenge}
-            isExpanded={showChallengeExpanded}
-            onExpandChange={setShowChallengeExpanded}
-            collapsed={requirementsCollapsed}
-            onCollapsedChange={setRequirementsCollapsed}
-          />
-        )}
-        
-        {/* AI Tutor */}
-        <AITutor
+        {/* Canvas Hub — unified panel for requirements, tutor, hints, solution */}
+        <CanvasHub
           challenge={challenge}
-          hints={hintResult}
-          forceOpen={forceOpenTutor}
-          apiKeyNeededMessage={apiKeyNeededMessage}
-          onApiKeyReady={handleApiKeyReady}
-        />
-
-        {/* Solution Player */}
-        <SolutionPlayer
-          isOpen={showSolutionPlayer}
-          onClose={() => setShowSolutionPlayer(false)}
+          hintResult={hintResult}
+          hasSolution={!!solutionResult}
           solution={solutionResult}
-          challenge={challenge}
-          currentStep={solutionStep}
-          onStepChange={handleSolutionStepChange}
-          onReset={handleSolutionReset}
-          onComplete={handleSolutionComplete}
-          isEvaluating={isEvaluatingForImprovement || isImproving}
-          evaluationScore={solutionEvaluationScore}
+          solutionStep={solutionStep}
+          onSolutionStepChange={handleSolutionStepChange}
+          onSolutionReset={handleSolutionReset}
+          onSolutionComplete={handleSolutionComplete}
+          isSolutionEvaluating={isEvaluatingForImprovement || isImproving}
+          solutionEvaluationScore={solutionEvaluationScore}
           hasAppliedSolution={hasAppliedSolution}
+          configVersion={aiConfigVersion}
+          components={components}
+          connections={connections}
+          requestOpenPanel={hubRequest}
         />
 
       </div>
@@ -1135,12 +1176,6 @@ const App: React.FC = () => {
         onClose={() => setShowEvaluation(false)}
         result={evaluation}
         improvementResult={improvementResult}
-      />
-
-      <HintModal 
-        isOpen={showHint}
-        onClose={() => setShowHint(false)}
-        result={hintResult}
       />
 
       <ComponentConfigDialog
@@ -1158,7 +1193,8 @@ const App: React.FC = () => {
           // Only allow closing if user has configured an API key
           if (hasApiKey()) {
             setShowAISettings(false);
-            setApiKeyNeededMessage(null);
+            // removed 
+            setAiConfigVersion(v => v + 1);
 
             // If closing for the first time after configuring key, highlight settings button
             if (!hasClosedSettingsOnce) {
@@ -1176,7 +1212,8 @@ const App: React.FC = () => {
           // Close modal after saving if key is configured
           if (hasApiKey()) {
             setShowAISettings(false);
-            setApiKeyNeededMessage(null);
+            // removed 
+            setAiConfigVersion(v => v + 1);
 
             // If saving for the first time, highlight settings button
             if (!hasClosedSettingsOnce) {

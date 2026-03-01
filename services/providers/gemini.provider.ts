@@ -281,7 +281,7 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
 
       1. List the essential components I should probably drag onto the canvas to satisfy the requirements (e.g., Load Balancer, Cache, Database type, etc.).
       2. Provide a 2-3 sentence high-level strategy on how to connect them (e.g., "Start with the client, put a load balancer in front of stateless services...").
-      3. List 2-3 key technical "gotchas" or considerations for this specific problem, INCLUDING cost optimization opportunities.
+      3. List 2-3 key technical "gotchas" or considerations for this specific problem, INCLUDING cost optimisation opportunities.
 
       Return the response in JSON format.
     `;
@@ -292,7 +292,7 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
         config: {
           responseMimeType: "application/json",
           responseSchema: this.hintSchema,
-          systemInstruction: "You are a helpful mentor guiding a student. Do not give the full answer code, just architectural building blocks and high-level strategy. Include cost-conscious recommendations - mention when cheaper alternatives exist or when cost optimization techniques (caching, CDN, etc.) should be considered."
+          systemInstruction: "You are a helpful mentor guiding a student. Do not give the full answer code, just architectural building blocks and high-level strategy. Include cost-conscious recommendations - mention when cheaper alternatives exist or when cost optimisation techniques (caching, CDN, etc.) should be considered."
         }
       });
 
@@ -331,11 +331,11 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
         'Junior': `
         EVALUATION LEVEL: JUNIOR/EASY
         - Focus ONLY on whether the basic functional requirements are met
-        - Generic component types (e.g., "Database", "Cache", "API") are PERFECTLY ACCEPTABLE - do NOT criticize for lack of specific tools
+        - Generic component types (e.g., "Database", "Cache", "API") are PERFECTLY ACCEPTABLE - do NOT criticise for lack of specific tools
         - The design should show understanding of basic client-server architecture
         - Do NOT expect or penalize for missing: security layers, CDN, observability, DevOps, scalability patterns
         - Score generously if they got the basic data flow correct
-        - EXTRA CREDIT (mention in pros, don't penalize if missing): any security, caching, or error handling they included`,
+        - EXTRA CREDIT (mention in pros, don't penalise if missing): any security, caching, or error handling they included`,
         'Mid': `
         EVALUATION LEVEL: MID/MEDIUM
         - Evaluate against the stated requirements and constraints
@@ -381,7 +381,7 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
       CRITICAL EVALUATION RULES:
       1. **ONLY evaluate against the stated requirements and constraints above**
       2. **Do NOT penalize for missing things that were NOT asked for** (e.g., if security wasn't in requirements, don't mark down for no security)
-      3. **Give EXTRA CREDIT in pros** for anything beyond requirements (security, monitoring, etc.) but never penalize for their absence unless required
+      3. **Give EXTRA CREDIT in pros** for anything beyond requirements (security, monitoring, etc.) but never penalise for their absence unless required
       4. **Primary question: Did they solve what was asked?** Score based on this.
       5. For Junior level: Be encouraging, focus on what they got right, suggest improvements gently
       6. For Senior/Principal: Be thorough and critical, expect production-ready thinking
@@ -636,7 +636,7 @@ The difficulty field in your response MUST be "${difficultyMapping[difficulty]}"
 
     return {
       sendMessage: async (message: string) => {
-        const result = await chat.sendMessage(message);
+        const result = await chat.sendMessage({ message });
         return { text: result.text || '' };
       }
     };
