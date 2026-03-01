@@ -204,22 +204,3 @@ export async function migrateToSecureEncryption(): Promise<boolean> {
   }
 }
 
-// --- Config helpers (kept for compatibility) ---
-
-export function encryptConfig(config: object): string {
-  try {
-    return btoa(JSON.stringify(config));
-  } catch (e) {
-    console.error('Config encryption failed:', e);
-    return '';
-  }
-}
-
-export function decryptConfig(encrypted: string): object | null {
-  try {
-    return JSON.parse(atob(encrypted));
-  } catch (e) {
-    console.error('Config decryption failed:', e);
-    return null;
-  }
-}
