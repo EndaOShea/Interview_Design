@@ -2,6 +2,7 @@ import { Challenge, EvaluationResult, HintResult, SolutionResult, SystemComponen
 import { DifficultyLevel } from '../gemini';
 
 export type ProviderType = 'gemini' | 'openai' | 'claude';
+export type ReasoningLevel = 'minimal' | 'low' | 'medium' | 'high';
 
 export interface ChatSession {
   sendMessage(message: string): Promise<{ text: string }>;

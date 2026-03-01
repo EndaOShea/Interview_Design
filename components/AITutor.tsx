@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Challenge, HintResult } from '../types';
-import { createTutorChat, hasApiKey, getCurrentProvider } from '../services/ai-service';
+import { createTutorChat, hasApiKey, getCurrentProvider, getStoredConfig } from '../services/ai-service';
+import { ChatSession } from '../services/providers/ai-provider.interface';
+import { PROVIDER_CONFIGS } from '../services/provider-config';
 import { COMPONENT_SPECS } from '../constants';
-import { Chat, GenerateContentResponse } from '@google/genai';
 import { MessageCircle, X, Send, Settings2, Bot, User, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AITutorProps {
@@ -23,7 +24,7 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
+  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
   const [hasConfiguredKey, setHasConfiguredKey] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -99,15 +100,17 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
         5. When suggesting components, refer to the names listed in the Toolbox so the user can find them.
       `;
 
-      try {
-        // createTutorChat now uses the stored API key from multi-provider system
-        const session = createTutorChat('', systemPrompt);
-        setChatSession(session);
-        setMessages([{ role: 'model', text: `Hi! I'm your System Design Tutor. I can help you with the "${challenge?.title || 'current'}" challenge. Where would you like to start?` }]);
-      } catch (error) {
-        console.error("Failed to init chat", error);
-        setHasConfiguredKey(false);
-      }
+      (async () => {
+        try {
+          // createTutorChat uses the stored API key from multi-provider system
+          const session = await createTutorChat('', systemPrompt);
+          setChatSession(session);
+          setMessages([{ role: 'model', text: `Hi! I'm your System Design Tutor. I can help you with the "${challenge?.title || 'current'}" challenge. Where would you like to start?` }]);
+        } catch (error) {
+          console.error("Failed to init chat", error);
+          setHasConfiguredKey(false);
+        }
+      })();
     }
   }, [challenge, hints]);
 
@@ -128,10 +131,9 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
     setIsLoading(true);
 
     try {
-      const result: GenerateContentResponse = await chatSession.sendMessage(userMsg);
-      const text = result.text;
-      if (text) {
-        setMessages(prev => [...prev, { role: 'model', text }]);
+      const result = await chatSession.sendMessage(userMsg);
+      if (result.text) {
+        setMessages(prev => [...prev, { role: 'model', text: result.text }]);
       }
     } catch (error) {
       setMessages(prev => [...prev, { role: 'model', text: "I'm having trouble connecting. Please check your API Key." }]);
@@ -167,7 +169,13 @@ const AITutor: React.FC<AITutorProps> = ({ challenge, hints, forceOpen, apiKeyNe
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">AI Tutor</h3>
-              <p className="text-[10px] text-indigo-300">Powered by Gemini 2.5</p>
+              <p className="text-[10px] text-indigo-300">
+                {(() => {
+                  const cfg = getStoredConfig();
+                  const provider = cfg?.selectedProvider || 'gemini';
+                  return `Powered by ${PROVIDER_CONFIGS[provider]?.name ?? 'AI'}`;
+                })()}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-1">

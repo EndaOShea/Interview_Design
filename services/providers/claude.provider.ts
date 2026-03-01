@@ -8,7 +8,7 @@ export class ClaudeProvider implements AIProvider {
   private client: Anthropic;
   private model: string;
 
-  constructor(apiKey: string, model: string = 'claude-sonnet-4-5-20250929') {
+  constructor(apiKey: string, model: string = 'claude-sonnet-4-6') {
     if (!apiKey) {
       throw new Error('NO_API_KEY');
     }
@@ -22,11 +22,12 @@ export class ClaudeProvider implements AIProvider {
     toolName: string,
     toolDescription: string,
     toolSchema: any,
-    temperature: number = 0.7
+    temperature: number = 0.7,
+    maxTokens: number = 4096
   ): Promise<T> {
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       temperature,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -183,10 +184,10 @@ I am stuck and need a "Starter Kit" or hints to get going.
     };
 
     const systemInstructions: Record<string, string> = {
-      'Junior': "You are a supportive mentor reviewing a junior engineer's first system design. Focus on whether they understood the problem and got the basics right.",
-      'Mid': "You are a senior engineer reviewing a mid-level design. Balance criticism with recognition of good choices.",
-      'Senior': "You are a principal architect reviewing a senior engineer's design. Be thorough and critical.",
-      'Principal': "You are a distinguished engineer reviewing an expert-level design. Apply the highest standards."
+      'Junior': "You are a supportive mentor reviewing a junior engineer's first system design. Focus on whether they understood the problem and got the basics right. Score on a scale of 0–100 (integers only).",
+      'Mid': "You are a senior engineer reviewing a mid-level design. Balance criticism with recognition of good choices. Score on a scale of 0–100 (integers only).",
+      'Senior': "You are a principal architect reviewing a senior engineer's design. Be thorough and critical. Score on a scale of 0–100 (integers only).",
+      'Principal': "You are a distinguished engineer reviewing an expert-level design. Apply the highest standards. Score on a scale of 0–100 (integers only)."
     };
 
     const prompt = `Evaluate this system design solution for the following challenge:
@@ -204,7 +205,9 @@ ${challenge.constraints.map((c, i) => `  ${i + 1}. ${c}`).join('\n')}
 USER DESIGN (JSON Graph):
 ${designJson}
 
-${difficultyGuidelines[challenge.difficulty] || difficultyGuidelines['Mid']}`;
+${difficultyGuidelines[challenge.difficulty] || difficultyGuidelines['Mid']}
+
+The score MUST be an integer between 0 and 100 (not 0–10).`;
 
     try {
       return await this.generateWithTool<EvaluationResult>(
@@ -215,7 +218,7 @@ ${difficultyGuidelines[challenge.difficulty] || difficultyGuidelines['Mid']}`;
         {
           type: 'object',
           properties: {
-            score: { type: 'number' },
+            score: { type: 'number', minimum: 0, maximum: 100 },
             summary: { type: 'string' },
             pros: { type: 'array', items: { type: 'string' } },
             cons: { type: 'array', items: { type: 'string' } },
@@ -268,7 +271,13 @@ ${hintsContext}
 
 ${solutionGuidelines[challenge.difficulty] || solutionGuidelines['Mid']}
 
-Component types MUST be one of: 'Clients & Entry', 'Traffic Management', 'Compute & App', 'Data Storage', 'Caching', 'Messaging & Streaming', 'File & Blob Storage', 'Content Delivery', 'Observability', 'Security', 'Reliability & FT', 'Scalability', 'Data Governance', 'DevOps & Ops', 'Config & State', 'Governance & Risk', 'Start', 'End'`;
+MANDATORY STRUCTURE RULES:
+1. Step 1 MUST contain a component with type='Start' and id='start-node'.
+2. The final step MUST contain a component with type='End' and id='end-node'.
+3. The entire solution MUST form a single connected graph — every component must be reachable from start-node and every component must have a path to end-node.
+4. Each step must include connections integrating its new components into the existing graph.
+5. Component types MUST be one of: 'Clients & Entry', 'Traffic Management', 'Compute & App', 'Data Storage', 'Caching', 'Messaging & Streaming', 'File & Blob Storage', 'Content Delivery', 'Observability', 'Security', 'Reliability & FT', 'Scalability', 'Data Governance', 'DevOps & Ops', 'Config & State', 'Governance & Risk', 'Start', 'End'
+6. All connection labels must be non-empty strings describing the data flow.`;
 
     try {
       return await this.generateWithTool<SolutionResult>(
@@ -311,7 +320,7 @@ Component types MUST be one of: 'Clients & Entry', 'Traffic Management', 'Comput
                         label: { type: 'string' },
                         type: { type: 'string' }
                       },
-                      required: ['sourceId', 'targetId', 'type']
+                      required: ['sourceId', 'targetId', 'label', 'type']
                     }
                   }
                 },
@@ -321,7 +330,9 @@ Component types MUST be one of: 'Clients & Entry', 'Traffic Management', 'Comput
             finalNotes: { type: 'string' }
           },
           required: ['architectureOverview', 'steps', 'finalNotes']
-        }
+        },
+        0.7,
+        8192
       );
     } catch (error) {
       throw this.mapError(error);
@@ -369,7 +380,7 @@ EVALUATION RESULTS:
 - Security Concerns: ${evaluation.securityConcerns.join('; ')}
 
 Generate 2-4 improvement steps that address the most critical issues.
-Use 'imp-' prefix for new component IDs (e.g., 'imp-cache-1').`;
+Use 'imp-' prefix for new component IDs (e.g., 'imp-cache-1'). Connection labels must be non-empty strings.`;
 
     try {
       const result = await this.generateWithTool<any>(
@@ -412,7 +423,7 @@ Use 'imp-' prefix for new component IDs (e.g., 'imp-cache-1').`;
                         label: { type: 'string' },
                         type: { type: 'string' }
                       },
-                      required: ['sourceId', 'targetId', 'type']
+                      required: ['sourceId', 'targetId', 'label', 'type']
                     }
                   }
                 },
@@ -423,7 +434,8 @@ Use 'imp-' prefix for new component IDs (e.g., 'imp-cache-1').`;
           },
           required: ['improvementOverview', 'steps', 'expectedScoreImprovement']
         },
-        0.6
+        0.6,
+        8192
       );
 
       return {

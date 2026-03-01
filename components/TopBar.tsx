@@ -1,7 +1,8 @@
 import React from 'react';
 import { Challenge } from '../types';
-import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown, LayoutGrid, Settings } from 'lucide-react';
+import { Sparkles, Play, RotateCcw, Lightbulb, Wand2, ChevronDown, LayoutGrid } from 'lucide-react';
 import { DifficultyLevel } from '../services/gemini';
+import ProviderBadge from './ProviderBadge';
 
 interface TopBarProps {
   challenge: Challenge | null;
@@ -21,6 +22,7 @@ interface TopBarProps {
   onClear: () => void;
   selectedDifficulty: DifficultyLevel;
   onDifficultyChange: (difficulty: DifficultyLevel) => void;
+  onExpandChallenge?: () => void;
 }
 
 const difficultyColors: Record<DifficultyLevel, string> = {
@@ -46,7 +48,8 @@ const TopBar: React.FC<TopBarProps> = ({
   hasSolution,
   onClear,
   selectedDifficulty,
-  onDifficultyChange
+  onDifficultyChange,
+  onExpandChallenge
 }) => {
   const [showDifficultyMenu, setShowDifficultyMenu] = React.useState(false);
   return (
@@ -102,8 +105,12 @@ const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {challenge && (
-          <div className="flex flex-col justify-center ml-4 border-l border-slate-700 pl-4 flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-slate-100">{challenge.title}</h2>
+          <div
+            className="flex flex-col justify-center ml-4 border-l border-slate-700 pl-4 flex-1 min-w-0 cursor-pointer group"
+            onClick={onExpandChallenge}
+            title="Click to expand challenge"
+          >
+            <h2 className="text-sm font-bold text-slate-100 group-hover:text-indigo-300 transition-colors">{challenge.title}</h2>
             <div className="flex items-start gap-2 text-xs text-slate-400 mt-1">
                <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shrink-0 mt-0.5
                  ${challenge.difficulty === 'Junior' ? 'bg-green-500/10 text-green-400' : 
@@ -120,17 +127,9 @@ const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
-        <button
-          onClick={onOpenSettings}
-          className={`px-2 py-1.5 text-xs font-medium transition-all rounded-md ${
-            highlightSettings
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/50 animate-pulse'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-          title="AI Provider Settings"
-        >
-          <Settings size={13} />
-        </button>
+        <div className={highlightSettings ? 'animate-pulse ring-2 ring-indigo-500 rounded-lg' : ''}>
+          <ProviderBadge onClick={onOpenSettings} />
+        </div>
 
         <button
           onClick={onClear}

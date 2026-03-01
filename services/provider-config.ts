@@ -7,24 +7,17 @@ export const PROVIDER_CONFIGS: Record<ProviderType, ProviderConfig> = {
     requiresApiKey: true,
     models: [
       {
+        id: 'gemini-3-flash-preview',
+        name: 'Gemini 3 Flash Preview',
+        contextWindow: 1000000,
+        costTier: 'free',
+        supportsStructuredOutput: true
+      },
+      {
         id: 'gemini-2.5-flash',
         name: 'Gemini 2.5 Flash',
         contextWindow: 1000000,
         costTier: 'free',
-        supportsStructuredOutput: true
-      },
-      {
-        id: 'gemini-1.5-flash',
-        name: 'Gemini 1.5 Flash',
-        contextWindow: 1000000,
-        costTier: 'free',
-        supportsStructuredOutput: true
-      },
-      {
-        id: 'gemini-1.5-pro',
-        name: 'Gemini 1.5 Pro',
-        contextWindow: 2000000,
-        costTier: 'low',
         supportsStructuredOutput: true
       }
     ]
@@ -36,40 +29,26 @@ export const PROVIDER_CONFIGS: Record<ProviderType, ProviderConfig> = {
     requiresApiKey: true,
     models: [
       {
-        id: 'gpt-4-turbo',
-        name: 'GPT-4 Turbo',
+        id: 'gpt-5',
+        name: 'GPT-5',
+        contextWindow: 128000,
+        costTier: 'high',
+        supportsStructuredOutput: true
+      },
+      {
+        id: 'gpt-5-mini',
+        name: 'GPT-5 Mini',
         contextWindow: 128000,
         costTier: 'medium',
         supportsStructuredOutput: true
       },
       {
-        id: 'gpt-4',
-        name: 'GPT-4',
-        contextWindow: 8192,
-        costTier: 'high',
-        supportsStructuredOutput: true
-      },
-      {
-        id: 'gpt-3.5-turbo',
-        name: 'GPT-3.5 Turbo',
-        contextWindow: 16385,
+        id: 'gpt-5-nano',
+        name: 'GPT-5 Nano',
+        contextWindow: 128000,
         costTier: 'low',
         supportsStructuredOutput: true
       },
-      {
-        id: 'o1',
-        name: 'O1',
-        contextWindow: 200000,
-        costTier: 'high',
-        supportsStructuredOutput: false
-      },
-      {
-        id: 'o1-mini',
-        name: 'O1 Mini',
-        contextWindow: 128000,
-        costTier: 'medium',
-        supportsStructuredOutput: false
-      }
     ]
   },
 
@@ -79,22 +58,22 @@ export const PROVIDER_CONFIGS: Record<ProviderType, ProviderConfig> = {
     requiresApiKey: true,
     models: [
       {
-        id: 'claude-opus-4-5-20251101',
-        name: 'Claude Opus 4.5',
+        id: 'claude-opus-4-6',
+        name: 'Claude Opus 4.6',
         contextWindow: 200000,
         costTier: 'high',
         supportsStructuredOutput: true
       },
       {
-        id: 'claude-sonnet-4-5-20250929',
-        name: 'Claude Sonnet 4.5',
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
         contextWindow: 200000,
         costTier: 'medium',
         supportsStructuredOutput: true
       },
       {
-        id: 'claude-3-5-haiku-20241022',
-        name: 'Claude Haiku 3.5',
+        id: 'claude-haiku-4-5-20251001',
+        name: 'Claude Haiku 4.5',
         contextWindow: 200000,
         costTier: 'low',
         supportsStructuredOutput: true

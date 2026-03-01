@@ -40,7 +40,7 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryState[]>([]);
 
   // View State (Pan & Zoom)
-  const [viewState, setViewState] = useState<ViewState>({ x: 0, y: 0, zoom: 0.6 });
+  const [viewState, setViewState] = useState<ViewState>({ x: 0, y: 0, zoom: 0.7 });
 
   // UI State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -49,6 +49,8 @@ const App: React.FC = () => {
   
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [showChallengeExpanded, setShowChallengeExpanded] = useState(false);
+  const [requirementsCollapsed, setRequirementsCollapsed] = useState(false);
   const [lastEvaluatedDesignHash, setLastEvaluatedDesignHash] = useState<string | null>(null);
 
   // Solution Player State
@@ -63,7 +65,6 @@ const App: React.FC = () => {
   const [solutionEvaluationScore, setSolutionEvaluationScore] = useState<number | null>(null);
   const [improvementResult, setImprovementResult] = useState<ImprovementResult | null>(null);
   const [isImproving, setIsImproving] = useState(false);
-  const [improvementStep, setImprovementStep] = useState(0);
 
   // Tools State
   const [activeTool, setActiveTool] = useState<ToolType>('select');
@@ -95,6 +96,23 @@ const App: React.FC = () => {
     componentType: null,
     draftComponent: null
   });
+
+  // Permanent constraint: always keep at least one Start and one End node
+  useEffect(() => {
+    const hasStart = components.some(c => c.type === ComponentType.FLOW_START);
+    const hasEnd   = components.some(c => c.type === ComponentType.FLOW_END);
+    if (hasStart && hasEnd) return;
+    setComponents(prev => {
+      const updated = [...prev];
+      if (!updated.some(c => c.type === ComponentType.FLOW_START)) {
+        updated.unshift({ id: `start-${Date.now()}`, type: ComponentType.FLOW_START, x: 300, y: 300, label: 'Start' });
+      }
+      if (!updated.some(c => c.type === ComponentType.FLOW_END)) {
+        updated.push({ id: `end-${Date.now()}`, type: ComponentType.FLOW_END, x: 900, y: 600, label: 'End' });
+      }
+      return updated;
+    });
+  }, [components]);
 
   // Check if user has an API key on first load and show settings
   useEffect(() => {
@@ -262,7 +280,6 @@ const App: React.FC = () => {
 
     // Reset all improvement state
     setImprovementResult(null);
-    setImprovementStep(0);
     setIsImproving(false);
     setIsEvaluatingForImprovement(false);
 
@@ -423,8 +440,8 @@ const App: React.FC = () => {
   };
 
   // Component dimensions for collision detection (matches Canvas default flow component size)
-  const COMPONENT_WIDTH = 111;  // Reduced by 30% to match flow components
-  const COMPONENT_HEIGHT = 63;  // Reduced by 30% to match flow components
+  const COMPONENT_WIDTH = 167;  // 50% wider
+  const COMPONENT_HEIGHT = 79;  // 25% taller
   const PADDING = 40; // Padding between components
 
   // Check if a position overlaps with existing components
@@ -534,13 +551,13 @@ const App: React.FC = () => {
     return findFreePosition(baseX, baseY, existingComponents);
   };
 
-  // Auto-layout algorithm to arrange all components properly
-  const handleAutoLayout = useCallback(() => {
-    if (components.length === 0) return;
+  // Core layout computation — pure function, takes arrays and returns arranged arrays
+  const computeAutoLayout = useCallback((
+    comps: SystemComponent[],
+    conns: Connection[]
+  ): { layoutComps: SystemComponent[], layoutConns: Connection[] } => {
+    if (comps.length === 0) return { layoutComps: comps, layoutConns: conns };
 
-    handleSnapshot(); // Save state before layout
-
-    // Define layer order (top to bottom)
     const layerOrder: string[] = [
       'Start',
       'Clients & Entry',
@@ -560,102 +577,189 @@ const App: React.FC = () => {
       'Config & State',
       'Governance & Risk',
       'End',
-      // Flow and annotation types
-      'Process',
-      'Decision',
-      'Data',
-      'Loop',
-      'Timer',
-      'Event',
-      'Layer',
-      'Text',
-      'Rectangle',
-      'Circle',
-      'Freehand',
-      'Custom'
+      'Process', 'Decision', 'Data', 'Loop', 'Timer', 'Event',
+      'Layer', 'Text', 'Rectangle', 'Circle', 'Freehand', 'Custom'
     ];
 
-    // Group components by their type/layer
     const componentsByLayer: Record<string, SystemComponent[]> = {};
-    components.forEach(comp => {
+    comps.forEach(comp => {
       const layer = comp.type as string;
-      if (!componentsByLayer[layer]) {
-        componentsByLayer[layer] = [];
-      }
+      if (!componentsByLayer[layer]) componentsByLayer[layer] = [];
       componentsByLayer[layer].push(comp);
     });
 
-    // Calculate incoming connections for each component (for ordering)
     const incomingCount: Record<string, number> = {};
-    components.forEach(c => { incomingCount[c.id] = 0; });
-    connections.forEach(conn => {
-      if (incomingCount[conn.targetId] !== undefined) {
-        incomingCount[conn.targetId]++;
-      }
+    comps.forEach(c => { incomingCount[c.id] = 0; });
+    conns.forEach(conn => {
+      if (incomingCount[conn.targetId] !== undefined) incomingCount[conn.targetId]++;
     });
 
-    // Sort components within each layer by incoming connections (sources first)
     Object.keys(componentsByLayer).forEach(layer => {
-      componentsByLayer[layer].sort((a, b) => {
-        const aIncoming = incomingCount[a.id] || 0;
-        const bIncoming = incomingCount[b.id] || 0;
-        return aIncoming - bIncoming;
-      });
+      componentsByLayer[layer].sort((a, b) => (incomingCount[a.id] || 0) - (incomingCount[b.id] || 0));
     });
 
-    // Layout parameters
-    const startX = 150;
-    const startY = 100;
-    const horizontalSpacing = COMPONENT_WIDTH + PADDING + 200; // Extra spacing for wider layout
-    const verticalSpacing = COMPONENT_HEIGHT + PADDING + 50; // Extra vertical spacing
+    const startX = 200;
+    const startY = 150;
+    // Wide columns + tall rows so straight lines run at oblique angles (not 90°/180°)
+    const horizontalSpacing = COMPONENT_WIDTH + PADDING + 500;
+    const verticalSpacing   = COMPONENT_HEIGHT + PADDING + 340;
 
-    // Position components
-    const newComponents: SystemComponent[] = [];
+    const layoutComps: SystemComponent[] = [];
     let currentY = startY;
     let maxComponentsInRow = 0;
+    let rowIndex = 0;
 
-    // Get layers in order
     const presentLayers = layerOrder.filter(layer => componentsByLayer[layer]?.length > 0);
 
     presentLayers.forEach(layer => {
       const layerComponents = componentsByLayer[layer];
-      if (!layerComponents || layerComponents.length === 0) return;
+      if (!layerComponents?.length) return;
 
-      let currentX = startX;
-
-      // Center the row if there are fewer components than the max row
+      // Stagger odd rows by half a column width so adjacent-row components
+      // are never directly above/below each other (avoids 90° connections)
+      const stagger = (rowIndex % 2 === 1) ? horizontalSpacing / 2 : 0;
+      let currentX = startX + stagger;
       if (maxComponentsInRow > 0 && layerComponents.length < maxComponentsInRow) {
-        currentX = startX + ((maxComponentsInRow - layerComponents.length) * horizontalSpacing) / 2;
+        currentX += ((maxComponentsInRow - layerComponents.length) * horizontalSpacing) / 2;
       }
 
       layerComponents.forEach((comp, idx) => {
-        newComponents.push({
-          ...comp,
-          x: currentX + (idx * horizontalSpacing),
-          y: currentY
-        });
+        layoutComps.push({ ...comp, x: currentX + idx * horizontalSpacing, y: currentY });
       });
 
-      // Track max components for centering
       maxComponentsInRow = Math.max(maxComponentsInRow, layerComponents.length);
       currentY += verticalSpacing;
+      rowIndex++;
     });
 
-    // Handle any components not in layerOrder (shouldn't happen but just in case)
-    const processedIds = new Set(newComponents.map(c => c.id));
-    components.forEach(comp => {
+    // Any components not in layerOrder
+    const processedIds = new Set(layoutComps.map(c => c.id));
+    comps.forEach(comp => {
       if (!processedIds.has(comp.id)) {
-        newComponents.push({
-          ...comp,
-          x: startX,
-          y: currentY
-        });
+        layoutComps.push({ ...comp, x: startX, y: currentY });
         currentY += verticalSpacing;
       }
     });
 
-    setComponents(newComponents);
-  }, [components, connections, handleSnapshot]);
+    // ── Degree-1 proximity placement ─────────────────────────────────────────
+    // Components connected to exactly one other component are placed adjacent
+    // to their partner regardless of layer type.
+    const getLayoutDims = (comp: SystemComponent) => {
+      if (comp.width && comp.height) return { w: comp.width, h: comp.height };
+      const t = comp.type as string;
+      if (t === 'Start' || t === 'End') return { w: 105, h: 105 };
+      if (t === 'Decision') return { w: 210, h: 175 };
+      return { w: COMPONENT_WIDTH, h: COMPONENT_HEIGHT };
+    };
+
+    {
+      const degree: Record<string, number> = {};
+      layoutComps.forEach(c => { degree[c.id] = 0; });
+      conns.forEach(conn => {
+        if (conn.sourceId === conn.targetId) return;
+        degree[conn.sourceId] = (degree[conn.sourceId] || 0) + 1;
+        degree[conn.targetId] = (degree[conn.targetId] || 0) + 1;
+      });
+
+      // Group degree-1 nodes by the partner they are solely connected to
+      const byPartner: Record<string, string[]> = {};
+      conns.forEach(conn => {
+        if (conn.sourceId === conn.targetId) return;
+        const sd = degree[conn.sourceId] || 0;
+        const td = degree[conn.targetId] || 0;
+        if (sd === 1 && td > 1) {
+          if (!byPartner[conn.targetId]) byPartner[conn.targetId] = [];
+          if (!byPartner[conn.targetId].includes(conn.sourceId)) byPartner[conn.targetId].push(conn.sourceId);
+        }
+        if (td === 1 && sd > 1) {
+          if (!byPartner[conn.sourceId]) byPartner[conn.sourceId] = [];
+          if (!byPartner[conn.sourceId].includes(conn.targetId)) byPartner[conn.sourceId].push(conn.targetId);
+        }
+      });
+
+      const proxGap = PADDING + 30;
+      Object.entries(byPartner).forEach(([partnerId, depIds]) => {
+        const pIdx = layoutComps.findIndex(c => c.id === partnerId);
+        if (pIdx < 0) return;
+        const partner = layoutComps[pIdx];
+        const pd = getLayoutDims(partner);
+        depIds.forEach((depId, i) => {
+          const dIdx = layoutComps.findIndex(c => c.id === depId);
+          if (dIdx < 0) return;
+          const dd = getLayoutDims(layoutComps[dIdx]);
+          layoutComps[dIdx] = {
+            ...layoutComps[dIdx],
+            x: partner.x + pd.w + proxGap,
+            y: partner.y + i * (dd.h + proxGap),
+          };
+        });
+      });
+    }
+
+    // ── Label collision resolution (straight lines, no waypoints) ────────────
+    const LABEL_PERP = 22;
+    const LABEL_HALF_H = 14;
+    const placedLabels: { x: number; y: number; halfW: number }[] = [];
+
+    const layoutConns = conns.map(conn => {
+      // Clear any waypoints/anchors set by previous auto-layouts — straight lines only
+      const base: Connection = { ...conn, waypoints: [], sourceAnchor: undefined, targetAnchor: undefined };
+
+      if (!conn.label?.trim()) return base;
+
+      const src = layoutComps.find(c => c.id === conn.sourceId);
+      const tgt = layoutComps.find(c => c.id === conn.targetId);
+      if (!src || !tgt) return base;
+
+      const sx = src.x, sy = src.y, ex = tgt.x, ey = tgt.y;
+      const lineLen = Math.sqrt((ex - sx) ** 2 + (ey - sy) ** 2);
+      const labelHalfW = Math.max(32, conn.label.length * 4.5 + 12);
+
+      let perpX = 0, perpY = -LABEL_PERP;
+      if (lineLen > 0) {
+        const vx = ex - sx, vy = ey - sy;
+        perpX = (-vy / lineLen) * LABEL_PERP;
+        perpY =  (vx / lineLen) * LABEL_PERP;
+        if (perpY > 0) { perpX = -perpX; perpY = -perpY; }
+      }
+
+      const candidates = [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75];
+      for (const t of candidates) {
+        const ancX = sx + (ex - sx) * t;
+        const ancY = sy + (ey - sy) * t;
+        const lblX = ancX + perpX, lblY = ancY + perpY;
+
+        const compOverlap = layoutComps.some(comp => {
+          if (comp.id === conn.sourceId || comp.id === conn.targetId) return false;
+          const hw = (comp.width  || COMPONENT_WIDTH)  / 2 + labelHalfW;
+          const hh = (comp.height || COMPONENT_HEIGHT) / 2 + LABEL_HALF_H;
+          return Math.abs(comp.x - lblX) < hw && Math.abs(comp.y - lblY) < hh;
+        });
+        const lblOverlap = placedLabels.some(pl =>
+          Math.abs(pl.x - lblX) < pl.halfW + labelHalfW && Math.abs(pl.y - lblY) < LABEL_HALF_H * 2
+        );
+        if (!compOverlap && !lblOverlap) {
+          placedLabels.push({ x: lblX, y: lblY, halfW: labelHalfW });
+          return { ...base, labelT: t };
+        }
+      }
+
+      const ancX = sx + (ex - sx) * 0.5, ancY = sy + (ey - sy) * 0.5;
+      placedLabels.push({ x: ancX + perpX, y: ancY + perpY, halfW: labelHalfW });
+      return { ...base, labelT: 0.5 };
+    });
+
+    return { layoutComps, layoutConns };
+  }, [COMPONENT_WIDTH, COMPONENT_HEIGHT, PADDING]);
+
+  // Auto-layout algorithm to arrange all components properly
+  const handleAutoLayout = useCallback(() => {
+    if (components.length === 0) return;
+    handleSnapshot();
+    const { layoutComps, layoutConns } = computeAutoLayout(components, connections);
+    setComponents(layoutComps);
+    setConnections(layoutConns);
+  }, [components, connections, handleSnapshot, computeAutoLayout]);
 
   // Convert solution component to canvas component
   const solutionToCanvasComponent = (
@@ -733,41 +837,6 @@ const App: React.FC = () => {
   };
 
   // Apply a solution step to the canvas
-  const applySolutionStep = useCallback((stepIndex: number) => {
-    if (!solutionResult || stepIndex >= solutionResult.steps.length) return;
-
-    const step = solutionResult.steps[stepIndex];
-    const newIdMap = { ...solutionIdMap };
-
-    handleSnapshot(); // Save state before applying step
-
-    // Add components - track already placed components to avoid overlaps within same step
-    const newComponents: SystemComponent[] = [];
-    step.components.forEach(solComp => {
-      const canvasComp = solutionToCanvasComponent(
-        solComp,
-        newIdMap,
-        step.components,
-        components,        // Current canvas components
-        newComponents      // Components already placed in this step
-      );
-      newIdMap[solComp.id] = canvasComp.id;
-      newComponents.push(canvasComp);
-    });
-
-    // Add connections
-    const newConnections: Connection[] = [];
-    step.connections.forEach(solConn => {
-      const canvasConn = solutionToCanvasConnection(solConn, newIdMap);
-      if (canvasConn) {
-        newConnections.push(canvasConn);
-      }
-    });
-
-    setSolutionIdMap(newIdMap);
-    setComponents(prev => [...prev, ...newComponents]);
-    setConnections(prev => [...prev, ...newConnections]);
-  }, [solutionResult, solutionIdMap, handleSnapshot, components]);
 
   // Handle AI Solve button click
   const handleAISolve = async () => {
@@ -776,6 +845,7 @@ const App: React.FC = () => {
     // If we already have a solution, just show the player
     if (solutionResult) {
       setShowSolutionPlayer(true);
+      setRequirementsCollapsed(true);
       return;
     }
 
@@ -784,6 +854,7 @@ const App: React.FC = () => {
       const result = await generateSolution(challenge, hintResult);
       setSolutionResult(result);
       setShowSolutionPlayer(true);
+      setRequirementsCollapsed(true);
       setSolutionStep(-1); // Start at -1 so step 0 gets applied when walkthrough starts
       setSolutionIdMap({});
 
@@ -817,16 +888,74 @@ const App: React.FC = () => {
   };
 
   // Handle step change in solution player
-  const handleSolutionStepChange = (newStep: number) => {
+  const handleSolutionStepChange = useCallback((newStep: number) => {
     if (!solutionResult) return;
 
-    // If going forward (or starting fresh after reset when solutionStep is -1), apply the new step
     if (newStep > solutionStep) {
-      applySolutionStep(newStep);
+      const step = solutionResult.steps[newStep];
+      if (!step) return;
+
+      handleSnapshot();
+
+      const newIdMap = { ...solutionIdMap };
+      const addedComps: SystemComponent[] = [];
+      step.components.forEach(solComp => {
+        // Deduplicate: if a component with the same label or tool already exists, reuse it
+        const allOnCanvas = [...components, ...addedComps];
+        const existing = allOnCanvas.find(c =>
+          (c.label && solComp.label && c.label.toLowerCase() === solComp.label.toLowerCase()) ||
+          (c.tool  && solComp.tool  && c.tool.toLowerCase()  === solComp.tool.toLowerCase())
+        );
+        if (existing) {
+          newIdMap[solComp.id] = existing.id;
+          return; // reuse, don't add again
+        }
+        const canvasComp = solutionToCanvasComponent(solComp, newIdMap, step.components, components, addedComps);
+        newIdMap[solComp.id] = canvasComp.id;
+        addedComps.push(canvasComp);
+      });
+
+      const addedConns: Connection[] = [];
+      step.connections.forEach(solConn => {
+        const canvasConn = solutionToCanvasConnection(solConn, newIdMap);
+        if (canvasConn) addedConns.push(canvasConn);
+      });
+
+      // Run auto-layout on the full combined set so every step is neatly arranged
+      const allComps = [...components, ...addedComps];
+      const allConns = [...connections, ...addedConns];
+
+      // Ensure every leaf node (no outgoing connections) is connected to the End node
+      const endNode = allComps.find(c => c.type === ComponentType.FLOW_END);
+      const startNode = allComps.find(c => c.type === ComponentType.FLOW_START);
+      if (endNode) {
+        const outgoingIds = new Set(allConns.map(c => c.sourceId));
+        allComps.forEach(comp => {
+          if (comp.id === endNode.id) return;
+          if (startNode && comp.id === startNode.id) return;
+          if (outgoingIds.has(comp.id)) return;
+          // Already connected to End?
+          if (allConns.some(c => c.sourceId === comp.id && c.targetId === endNode.id)) return;
+          allConns.push({
+            id: `auto-end-${comp.id}`,
+            sourceId: comp.id,
+            targetId: endNode.id,
+            label: 'completes',
+            type: 'directed',
+            color: '#475569'
+          });
+        });
+      }
+      const { layoutComps, layoutConns } = computeAutoLayout(allComps, allConns);
+
+      setSolutionIdMap(newIdMap);
+      setComponents(layoutComps);
+      setConnections(layoutConns);
     }
 
     setSolutionStep(newStep);
-  };
+  }, [solutionResult, solutionStep, solutionIdMap, components, connections,
+      handleSnapshot, solutionToCanvasComponent, solutionToCanvasConnection, computeAutoLayout]);
 
   // Handle reset solution
   const handleSolutionReset = () => {
@@ -844,80 +973,32 @@ const App: React.FC = () => {
   // Check if solution has already been applied to canvas
   const hasAppliedSolution = Object.keys(solutionIdMap).length > 0;
 
-  // Handle solution completion - evaluate and improve
+  // Handle solution completion - evaluate and show improvement suggestions if score < 80
   const handleSolutionComplete = async () => {
     if (!challenge) return;
 
-    // If we already have an evaluation score >= 85, just show evaluation modal
-    if (solutionEvaluationScore !== null && solutionEvaluationScore >= 85) {
+    // Already evaluated — just open the modal
+    if (solutionEvaluationScore !== null) {
       setShowEvaluation(true);
       return;
     }
 
-    // If we already have an evaluation and improvements, apply the next improvement
-    if (solutionEvaluationScore !== null && improvementResult) {
-      // Apply the next improvement step
-      if (improvementStep < improvementResult.steps.length) {
-        const step = improvementResult.steps[improvementStep];
-        const newIdMap = { ...solutionIdMap };
-
-        handleSnapshot();
-
-        // Add components from improvement step
-        const newComponents: SystemComponent[] = [];
-        step.components.forEach(solComp => {
-          const canvasComp = solutionToCanvasComponent(
-            solComp,
-            newIdMap,
-            step.components,
-            components,
-            newComponents
-          );
-          newIdMap[solComp.id] = canvasComp.id;
-          newComponents.push(canvasComp);
-        });
-
-        // Add connections
-        const newConnections: Connection[] = [];
-        step.connections.forEach(solConn => {
-          const canvasConn = solutionToCanvasConnection(solConn, newIdMap);
-          if (canvasConn) {
-            newConnections.push(canvasConn);
-          }
-        });
-
-        setSolutionIdMap(newIdMap);
-        setComponents(prev => [...prev, ...newComponents]);
-        setConnections(prev => [...prev, ...newConnections]);
-        setImprovementStep(prev => prev + 1);
-
-        // If all improvements applied, re-evaluate
-        if (improvementStep + 1 >= improvementResult.steps.length) {
-          // Show final score
-          setSolutionEvaluationScore(improvementResult.expectedScoreImprovement);
-          setShowEvaluation(true);
-        }
-      }
-      return;
-    }
-
-    // First time - evaluate the design
+    // First time — evaluate the design
     setIsEvaluatingForImprovement(true);
     try {
       const evalResult = await evaluateDesign(challenge, components, connections);
       setEvaluation(evalResult);
       setSolutionEvaluationScore(evalResult.score);
 
-      // If score is below 85, generate improvements
-      if (evalResult.score < 85) {
+      // If score is below 80, generate improvement suggestions (text only — no canvas changes)
+      if (evalResult.score < 80) {
         setIsImproving(true);
         const improvements = await improveSolution(challenge, components, connections, evalResult);
         setImprovementResult(improvements);
         setIsImproving(false);
-      } else {
-        // Score is good, just show evaluation
-        setShowEvaluation(true);
       }
+
+      setShowEvaluation(true);
     } catch (error: any) {
       console.error("Evaluation/Improvement error:", error);
 
@@ -952,7 +1033,7 @@ const App: React.FC = () => {
     setComponents([]);
     setConnections([]);
     setEvaluation(null);
-    setViewState({ x: 0, y: 0, zoom: 0.6 }); // Reset view to default 60%
+    setViewState({ x: 0, y: 0, zoom: 0.7 }); // Reset view to default 60%
   };
 
   const applyColorToSelection = (color: string) => {
@@ -979,6 +1060,7 @@ const App: React.FC = () => {
         onClear={handleClearBoard}
         selectedDifficulty={selectedDifficulty}
         onDifficultyChange={setSelectedDifficulty}
+        onExpandChallenge={() => setShowChallengeExpanded(true)}
       />
       
       <div className="flex flex-1 overflow-hidden relative">
@@ -1006,13 +1088,21 @@ const App: React.FC = () => {
           setSelectedColor={applyColorToSelection}
           zoom={viewState.zoom}
           onZoomChange={(z) => setViewState(prev => ({ ...prev, zoom: z }))}
-          onZoomReset={() => setViewState({ x: 0, y: 0, zoom: 0.6 })}
+          onZoomReset={() => setViewState({ x: 0, y: 0, zoom: 0.7 })}
           onUndo={handleUndo}
           canUndo={history.length > 0}
         />
         
         {/* Requirements Panel */}
-        {challenge && <RequirementsPanel challenge={challenge} />}
+        {challenge && (
+          <RequirementsPanel
+            challenge={challenge}
+            isExpanded={showChallengeExpanded}
+            onExpandChange={setShowChallengeExpanded}
+            collapsed={requirementsCollapsed}
+            onCollapsedChange={setRequirementsCollapsed}
+          />
+        )}
         
         {/* AI Tutor */}
         <AITutor
@@ -1040,10 +1130,11 @@ const App: React.FC = () => {
 
       </div>
 
-      <EvaluationModal 
-        isOpen={showEvaluation} 
-        onClose={() => setShowEvaluation(false)} 
+      <EvaluationModal
+        isOpen={showEvaluation}
+        onClose={() => setShowEvaluation(false)}
         result={evaluation}
+        improvementResult={improvementResult}
       />
 
       <HintModal 

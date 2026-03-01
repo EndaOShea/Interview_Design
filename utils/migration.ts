@@ -18,7 +18,7 @@ export interface StoredAIConfig {
  * Migrate from legacy gemini_user_api_key to new ai_config format
  * This runs once on app mount to ensure seamless upgrade for existing users
  */
-export function migrateToMultiProvider(): boolean {
+export async function migrateToMultiProvider(): Promise<boolean> {
   try {
     // Check if already migrated
     const migrated = localStorage.getItem(MIGRATION_FLAG);
@@ -43,7 +43,7 @@ export function migrateToMultiProvider(): boolean {
     }
 
     // Decrypt legacy key
-    const decryptedKey = decryptApiKey(legacyKey);
+    const decryptedKey = await decryptApiKey(legacyKey);
     if (!decryptedKey) {
       console.error('Failed to decrypt legacy API key');
       localStorage.setItem(MIGRATION_FLAG, 'true');
@@ -55,7 +55,7 @@ export function migrateToMultiProvider(): boolean {
       selectedProvider: 'gemini',
       selectedModel: 'gemini-2.5-flash',
       apiKeys: {
-        gemini: encryptApiKey(decryptedKey)
+        gemini: await encryptApiKey(decryptedKey)
       }
     };
 
@@ -105,10 +105,10 @@ export function saveAIConfig(config: StoredAIConfig): boolean {
 /**
  * Update API key for a specific provider
  */
-export function updateProviderKey(
+export async function updateProviderKey(
   provider: 'gemini' | 'openai' | 'claude',
   apiKey: string
-): boolean {
+): Promise<boolean> {
   try {
     const config = getAIConfig() || {
       selectedProvider: provider,
@@ -118,7 +118,7 @@ export function updateProviderKey(
       apiKeys: {}
     };
 
-    const encrypted = encryptApiKey(apiKey);
+    const encrypted = await encryptApiKey(apiKey);
     if (!encrypted) {
       return false;
     }

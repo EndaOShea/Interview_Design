@@ -8,8 +8,7 @@ import {
   Lightbulb,
   Layers,
   RotateCcw,
-  Sparkles,
-  TrendingUp
+  Sparkles
 } from 'lucide-react';
 
 interface SolutionPlayerProps {
@@ -228,29 +227,19 @@ const SolutionPlayer: React.FC<SolutionPlayerProps> = ({
               {isEvaluating ? (
                 <span className="animate-pulse flex items-center gap-2">
                   <Sparkles className="w-4 h-4 animate-spin" />
-                  {evaluationScore === null ? 'Evaluating Design...' : 'Generating Improvements...'}
+                  {evaluationScore === null ? 'Evaluating Design...' : 'Generating Suggestions...'}
                 </span>
-              ) : evaluationScore !== null && evaluationScore < 85 ? (
-                <>
-                  <TrendingUp className="w-4 h-4" />
-                  Apply Next Improvement
-                </>
-              ) : evaluationScore !== null ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  View Full Evaluation
-                </>
               ) : (
                 <>
-                  <Play className="w-4 h-4" />
-                  Evaluate & Improve
+                  <CheckCircle2 className="w-4 h-4" />
+                  {evaluationScore !== null ? 'View Evaluation' : 'Evaluate & Get Feedback'}
                 </>
               )}
             </button>
 
-            {evaluationScore !== null && evaluationScore < 85 && (
+            {evaluationScore !== null && evaluationScore < 80 && (
               <p className="text-xs text-center text-slate-400">
-                Score below 85 - click to apply AI improvements
+                Score below 80 — improvement suggestions are ready
               </p>
             )}
 

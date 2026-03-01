@@ -3,7 +3,7 @@ import { X, Check, Loader2, AlertCircle, Key } from 'lucide-react';
 import { ProviderType } from '../services/providers/ai-provider.interface';
 import { PROVIDER_CONFIGS, getDefaultModel } from '../services/provider-config';
 import { encryptApiKey, decryptApiKey } from '../utils/crypto';
-import { StoredAIConfig, testConnection } from '../services/ai-service';
+import { StoredAIConfig, ReasoningLevel, testConnection } from '../services/ai-service';
 import { trackProviderConfigured } from '../utils/analytics';
 
 interface AISettingsProps {
@@ -31,6 +31,8 @@ const AI_CONFIG_KEY = 'ai_config';
 const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
   const [selectedProvider, setSelectedProvider] = useState<ProviderType>('gemini');
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>('medium');
+  const [fallbackProvider, setFallbackProvider] = useState<ProviderType | ''>('');
   const [apiKeys, setApiKeys] = useState<Record<ProviderType, string>>({
     gemini: '',
     openai: '',
@@ -47,21 +49,25 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
     }
   }, [isOpen]);
 
-  const loadConfig = () => {
+  const loadConfig = async () => {
     try {
       const stored = localStorage.getItem(AI_CONFIG_KEY);
       if (stored) {
         const config: StoredAIConfig = JSON.parse(stored);
         setSelectedProvider(config.selectedProvider);
-        setSelectedModel(config.selectedModel);
+        const providerModels = PROVIDER_CONFIGS[config.selectedProvider]?.models || [];
+        const modelValid = providerModels.some(m => m.id === config.selectedModel);
+        setSelectedModel(modelValid ? config.selectedModel : getDefaultModel(config.selectedProvider));
+        setReasoningLevel(config.reasoningLevel || 'medium');
 
         // Decrypt stored API keys
         const decryptedKeys: Record<ProviderType, string> = {
-          gemini: config.apiKeys.gemini ? decryptApiKey(config.apiKeys.gemini) : '',
-          openai: config.apiKeys.openai ? decryptApiKey(config.apiKeys.openai) : '',
-          claude: config.apiKeys.claude ? decryptApiKey(config.apiKeys.claude) : ''
+          gemini: config.apiKeys.gemini ? await decryptApiKey(config.apiKeys.gemini) : '',
+          openai: config.apiKeys.openai ? await decryptApiKey(config.apiKeys.openai) : '',
+          claude: config.apiKeys.claude ? await decryptApiKey(config.apiKeys.claude) : ''
         };
         setApiKeys(decryptedKeys);
+        setFallbackProvider(config.fallbackProvider ?? '');
       } else {
         // Set default model for new users
         setSelectedModel(getDefaultModel('gemini'));
@@ -73,24 +79,17 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
     }
   };
 
-  // Update selected model when provider changes
-  useEffect(() => {
-    if (selectedProvider) {
-      const providerConfig = PROVIDER_CONFIGS[selectedProvider];
-      if (providerConfig && providerConfig.models.length > 0) {
-        // If current selected model is not available for this provider, choose default
-        const modelExists = providerConfig.models.some(m => m.id === selectedModel);
-        if (!modelExists) {
-          setSelectedModel(getDefaultModel(selectedProvider));
-        }
-      }
-      setHasChanges(true);
-      setTestResult(null);
-    }
-  }, [selectedProvider]);
-
   const handleProviderChange = (provider: ProviderType) => {
     setSelectedProvider(provider);
+    const providerConfig = PROVIDER_CONFIGS[provider];
+    if (providerConfig && providerConfig.models.length > 0) {
+      const modelExists = providerConfig.models.some(m => m.id === selectedModel);
+      if (!modelExists) {
+        setSelectedModel(getDefaultModel(provider));
+      }
+    }
+    setHasChanges(true);
+    setTestResult(null);
   };
 
   const handleModelChange = (modelId: string) => {
@@ -116,29 +115,34 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
     setTestResult(null);
 
     // Test the actual API connection
-    const result = await testConnection(selectedProvider, currentKey);
+    const result = await testConnection(selectedProvider, currentKey, selectedModel, reasoningLevel);
     setTestResult(result);
     setIsTesting(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
       // Encrypt API keys before saving
       const encryptedKeys: Record<string, string> = {};
-      Object.entries(apiKeys).forEach(([provider, key]) => {
+      for (const [provider, key] of Object.entries(apiKeys)) {
         if (key.trim()) {
-          encryptedKeys[provider] = encryptApiKey(key);
+          encryptedKeys[provider] = await encryptApiKey(key);
         }
-      });
+      }
 
       const config: StoredAIConfig = {
         selectedProvider,
         selectedModel,
+        reasoningLevel,
+        fallbackProvider: fallbackProvider || undefined,
         apiKeys: encryptedKeys as any
       };
 
       localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
       setHasChanges(false);
+
+      // Notify ProviderBadge and other listeners that config changed
+      window.dispatchEvent(new Event('ai-config-updated'));
 
       // Track provider configuration
       trackProviderConfigured(selectedProvider);
@@ -164,6 +168,9 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
 
   const currentProviderConfig = PROVIDER_CONFIGS[selectedProvider];
   const currentModelConfig = currentProviderConfig?.models.find(m => m.id === selectedModel);
+  const configuredProviders = (Object.entries(apiKeys) as [ProviderType, string][])
+    .filter(([, key]) => key.trim())
+    .map(([id]) => id);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
@@ -252,6 +259,76 @@ const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose, onSave }) => {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Reasoning Level — only shown for OpenAI */}
+          {selectedProvider === 'openai' && (
+            <div>
+              <label className="block text-sm font-semibold text-white mb-1">Thinking Level</label>
+              <p className="text-xs text-slate-400 mb-3">Controls how much internal reasoning the model uses</p>
+              <div className="grid grid-cols-4 gap-2">
+                {([
+                  { value: 'minimal', label: 'Minimal', desc: 'Fastest, no reasoning tokens' },
+                  { value: 'low',     label: 'Low',     desc: 'Light reasoning, quick answers' },
+                  { value: 'medium',  label: 'Medium',  desc: 'Balanced speed and depth' },
+                  { value: 'high',    label: 'High',    desc: 'Deep multistep reasoning' },
+                ] as { value: ReasoningLevel; label: string; desc: string }[]).map(({ value, label, desc }) => (
+                  <button
+                    key={value}
+                    onClick={() => { setReasoningLevel(value); setHasChanges(true); }}
+                    title={desc}
+                    className={`py-2 px-3 rounded-lg text-sm border transition-all ${
+                      reasoningLevel === value
+                        ? 'border-indigo-500 bg-indigo-900/30 text-white'
+                        : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                {reasoningLevel === 'minimal' && 'Optimized for maximum speed — few or no reasoning tokens.'}
+                {reasoningLevel === 'low'     && 'Light reasoning with quick judgement — suitable for simple tasks.'}
+                {reasoningLevel === 'medium'  && 'Balanced default — good mix of speed and depth for most tasks.'}
+                {reasoningLevel === 'high'    && 'Deep multistep reasoning — best for complex planning and analysis.'}
+              </p>
+            </div>
+          )}
+
+          {/* Fallback Provider — only shown when 2+ keys configured */}
+          {configuredProviders.length > 1 && (
+            <div>
+              <label className="block text-sm font-semibold text-white mb-1">Fallback Provider</label>
+              <p className="text-xs text-slate-400 mb-3">Used automatically if the primary provider fails</p>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => { setFallbackProvider(''); setHasChanges(true); }}
+                  className={`px-4 py-2 rounded-lg text-sm border transition-all ${
+                    fallbackProvider === ''
+                      ? 'border-indigo-500 bg-indigo-900/30 text-white'
+                      : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600'
+                  }`}
+                >
+                  None
+                </button>
+                {configuredProviders
+                  .filter(p => p !== selectedProvider)
+                  .map(p => (
+                    <button
+                      key={p}
+                      onClick={() => { setFallbackProvider(p); setHasChanges(true); }}
+                      className={`px-4 py-2 rounded-lg text-sm border transition-all ${
+                        fallbackProvider === p
+                          ? 'border-indigo-500 bg-indigo-900/30 text-white'
+                          : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      {PROVIDER_CONFIGS[p].name}
+                    </button>
+                  ))}
+              </div>
             </div>
           )}
 

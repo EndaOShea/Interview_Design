@@ -20,8 +20,8 @@ interface CanvasProps {
   onSnapshot: () => void;
 }
 
-const COMPONENT_WIDTH = 111;  // Reduced by 30% from 158
-const COMPONENT_HEIGHT = 63;  // Reduced by 30% from 90
+const COMPONENT_WIDTH = 167;  // 50% wider than original 111
+const COMPONENT_HEIGHT = 79;  // 25% taller than original 63
 
 // Merged connection group for auto-layout
 interface MergedConnectionGroup {
@@ -60,6 +60,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const minimapDragging = useRef(false);
   const [draggedComponent, setDraggedComponent] = useState<{id: string, startX: number, startY: number} | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -69,7 +70,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const [marqueeAdditive, setMarqueeAdditive] = useState(false); // Track if Ctrl/Shift was held at start
   const [preMarqueeSelection, setPreMarqueeSelection] = useState<string[]>([]); // Selection before marquee
   const [draggingWaypoint, setDraggingWaypoint] = useState<{connectionId: string, waypointIndex: number, startX: number, startY: number} | null>(null);
-  const [draggingLabel, setDraggingLabel] = useState<{connectionId: string, startX: number, startY: number, initialOffset: {x: number, y: number}} | null>(null);
+  const [draggingLabel, setDraggingLabel] = useState<{connectionId: string, startX: number, startY: number, lineStart: {x:number,y:number}, lineEnd: {x:number,y:number}, lineLen: number, currentT: number} | null>(null);
 
   // Resize State
   const [resizing, setResizing] = useState<{
@@ -102,9 +103,23 @@ const Canvas: React.FC<CanvasProps> = ({
       if ((e.key === 'Delete' || e.key === 'Backspace')) {
         if (selectedIds.length > 0) {
           e.preventDefault();
-          onSnapshot(); // Save state before delete
-          setComponents(prev => prev.filter(c => !selectedIds.includes(c.id)));
-          setConnections(prev => prev.filter(c => !selectedIds.includes(c.sourceId) && !selectedIds.includes(c.targetId)));
+          const toDelete = selectedIds.filter(id => {
+            const c = components.find(comp => comp.id === id);
+            return c && c.type !== ComponentType.FLOW_START && c.type !== ComponentType.FLOW_END;
+          });
+          if (toDelete.length > 0) {
+            onSnapshot();
+            setConnections(prev => {
+              const remaining = prev.filter(c => !toDelete.includes(c.sourceId) && !toDelete.includes(c.targetId));
+              setComponents(prevComps => prevComps.filter(comp =>
+                !toDelete.includes(comp.id) &&
+                (comp.type === ComponentType.FLOW_START ||
+                 comp.type === ComponentType.FLOW_END ||
+                 remaining.some(c => c.sourceId === comp.id || c.targetId === comp.id))
+              ));
+              return remaining;
+            });
+          }
           setSelectedIds([]);
         }
       }
@@ -151,8 +166,8 @@ const Canvas: React.FC<CanvasProps> = ({
     if (comp.width && comp.height) return { w: comp.width, h: comp.height };
 
     const { type } = comp;
-    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) return { w: 84, h: 84 };
-    if (type === ComponentType.FLOW_DECISION) return { w: 140, h: 140 };
+    if (type === ComponentType.FLOW_START || type === ComponentType.FLOW_END) return { w: 105, h: 105 };
+    if (type === ComponentType.FLOW_DECISION) return { w: 210, h: 175 };
     if (type === ComponentType.STRUCTURE_LAYER) return { w: 800, h: 500 };
     if (type === ComponentType.ANNOTATION_RECT) return { w: 400, h: 300 };
     if (type === ComponentType.ANNOTATION_CIRCLE) return { w: 300, h: 300 };
@@ -576,23 +591,38 @@ const Canvas: React.FC<CanvasProps> = ({
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    onSnapshot(); // Save state before delete
-    // If deleting a selected item, delete all selected items
-    if (selectedIds.includes(id)) {
-      setComponents(prev => prev.filter(c => !selectedIds.includes(c.id)));
-      setConnections(prev => prev.filter(c => !selectedIds.includes(c.sourceId) && !selectedIds.includes(c.targetId)));
-      setSelectedIds([]);
-    } else {
-      // Delete just this one item
-      setComponents(prev => prev.filter(c => c.id !== id));
-      setConnections(prev => prev.filter(c => c.sourceId !== id && c.targetId !== id));
-    }
+    const idsToDelete = selectedIds.includes(id) ? selectedIds : [id];
+    const toDelete = idsToDelete.filter(sid => {
+      const c = components.find(comp => comp.id === sid);
+      return c && c.type !== ComponentType.FLOW_START && c.type !== ComponentType.FLOW_END;
+    });
+    if (toDelete.length === 0) return;
+    onSnapshot();
+    setConnections(prev => {
+      const remaining = prev.filter(c => !toDelete.includes(c.sourceId) && !toDelete.includes(c.targetId));
+      setComponents(prevComps => prevComps.filter(comp =>
+        !toDelete.includes(comp.id) &&
+        (comp.type === ComponentType.FLOW_START ||
+         comp.type === ComponentType.FLOW_END ||
+         remaining.some(c => c.sourceId === comp.id || c.targetId === comp.id))
+      ));
+      return remaining;
+    });
+    setSelectedIds([]);
   };
 
   const handleDeleteConnection = (id: string, e: React.MouseEvent) => {
-     e.stopPropagation();
-     onSnapshot(); // Save state before delete
-     setConnections(prev => prev.filter(c => c.id !== id));
+    e.stopPropagation();
+    onSnapshot();
+    setConnections(prev => {
+      const remaining = prev.filter(c => c.id !== id);
+      setComponents(prevComps => prevComps.filter(comp =>
+        comp.type === ComponentType.FLOW_START ||
+        comp.type === ComponentType.FLOW_END ||
+        remaining.some(c => c.sourceId === comp.id || c.targetId === comp.id)
+      ));
+      return remaining;
+    });
   };
 
   const handleAddWaypoint = (connectionId: string, x: number, y: number, e: React.MouseEvent) => {
@@ -640,7 +670,7 @@ const Canvas: React.FC<CanvasProps> = ({
     if (activeTool === 'connect_arrow' || activeTool === 'connect_line' || activeTool === 'connect_loop') {
       e.stopPropagation();
       setConnectingSourceId(id);
-      setConnectingSourceAnchor('center'); // Default to center
+      setConnectingSourceAnchor(null);
 
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
@@ -710,7 +740,7 @@ const Canvas: React.FC<CanvasProps> = ({
             type,
             color: connectionColor,
             sourceAnchor: connectingSourceAnchor || undefined,
-            targetAnchor: targetAnchor || 'center'
+            targetAnchor: targetAnchor
           };
 
           // Prevent duplicates
@@ -755,31 +785,24 @@ const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    // Dragging Label
+    // Dragging Label — constrained to line direction
     if (draggingLabel) {
       const dx = (e.clientX - draggingLabel.startX) / viewState.zoom;
       const dy = (e.clientY - draggingLabel.startY) / viewState.zoom;
 
-      setConnections(prev => prev.map(conn => {
-        if (conn.id === draggingLabel.connectionId) {
-          const newOffset = {
-            x: draggingLabel.initialOffset.x + dx,
-            y: draggingLabel.initialOffset.y + dy
-          };
-          return { ...conn, labelOffset: newOffset };
-        }
-        return conn;
-      }));
+      const { lineStart: ls, lineEnd: le, lineLen: ll, currentT } = draggingLabel;
+      if (ll > 0) {
+        // Project mouse delta onto the line direction unit vector
+        const vecX = le.x - ls.x;
+        const vecY = le.y - ls.y;
+        const proj = (dx * vecX + dy * vecY) / (ll * ll);
+        const newT = Math.max(0.05, Math.min(0.95, currentT + proj));
 
-      setDraggingLabel({
-        ...draggingLabel,
-        startX: e.clientX,
-        startY: e.clientY,
-        initialOffset: {
-          x: draggingLabel.initialOffset.x + dx,
-          y: draggingLabel.initialOffset.y + dy
-        }
-      });
+        setConnections(prev => prev.map(conn =>
+          conn.id === draggingLabel.connectionId ? { ...conn, labelT: newT } : conn
+        ));
+        setDraggingLabel({ ...draggingLabel, startX: e.clientX, startY: e.clientY, currentT: newT });
+      }
       return;
     }
 
@@ -1185,49 +1208,61 @@ const Canvas: React.FC<CanvasProps> = ({
                       />
 
                       {/* Count badge label at merge point */}
-                      <g transform={`translate(${mergeX}, ${mergeY - 30})`}>
-                        <rect
-                          x={-group.label.length * 3 - 15}
-                          y={-14}
-                          width={group.label.length * 6 + 30}
-                          height={28}
-                          rx={14}
-                          fill="#ffffff"
-                          stroke={group.color}
-                          strokeWidth="2"
-                          filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))"
-                        />
-                        {/* Count badge circle */}
-                        <circle
-                          cx={-group.label.length * 3}
-                          cy={0}
-                          r={10}
-                          fill={group.color}
-                          stroke="#ffffff"
-                          strokeWidth="2"
-                        />
-                        <text
-                          x={-group.label.length * 3}
-                          y={4}
-                          textAnchor="middle"
-                          fill="#ffffff"
-                          fontSize="10px"
-                          fontWeight="bold"
-                        >
-                          {group.sources.length}
-                        </text>
-                        {/* Label text */}
-                        <text
-                          x={5}
-                          y={4}
-                          textAnchor="start"
-                          fill="#000000"
-                          fontSize="11px"
-                          fontWeight="600"
-                        >
-                          {group.label} ({group.sources.length}×)
-                        </text>
-                      </g>
+                      {(() => {
+                        const sourceNames = group.sources.map(sid => {
+                          const c = components.find(comp => comp.id === sid);
+                          return c ? (c.customLabel || c.label || sid) : sid;
+                        });
+                        const targetComp = components.find(c => c.id === group.targetId);
+                        const targetName = targetComp ? (targetComp.customLabel || targetComp.label || group.targetId) : group.targetId;
+                        const tooltipText = `"${group.label}" × ${group.sources.length}\n\nFrom:\n${sourceNames.map(n => `  • ${n}`).join('\n')}\n\nTo: ${targetName}`;
+                        return (
+                          <g transform={`translate(${mergeX}, ${mergeY - 30})`} style={{ cursor: 'help' }}>
+                            <title>{tooltipText}</title>
+                            <rect
+                              x={-group.label.length * 3 - 15}
+                              y={-14}
+                              width={group.label.length * 6 + 30}
+                              height={28}
+                              rx={14}
+                              fill="#ffffff"
+                              stroke={group.color}
+                              strokeWidth="2"
+                              filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))"
+                            />
+                            {/* Count badge circle */}
+                            <circle
+                              cx={-group.label.length * 3}
+                              cy={0}
+                              r={10}
+                              fill={group.color}
+                              stroke="#ffffff"
+                              strokeWidth="2"
+                            />
+                            <text
+                              x={-group.label.length * 3}
+                              y={4}
+                              textAnchor="middle"
+                              fill="#ffffff"
+                              fontSize="12px"
+                              fontWeight="bold"
+                            >
+                              {group.sources.length}
+                            </text>
+                            {/* Label text */}
+                            <text
+                              x={5}
+                              y={4}
+                              textAnchor="start"
+                              fill="#000000"
+                              fontSize="13px"
+                              fontWeight="600"
+                            >
+                              {group.label} ({group.sources.length}×)
+                            </text>
+                          </g>
+                        );
+                      })()}
                     </g>
                   );
                 })}
@@ -1248,6 +1283,10 @@ const Canvas: React.FC<CanvasProps> = ({
             let pathData = '';
             let midX = 0;
             let midY = 0;
+            // Line endpoints in world coords (for label-t positioning)
+            let lineStart = { x: 0, y: 0 };
+            let lineEnd   = { x: 0, y: 0 };
+            let lineLen   = 0;
 
             if (isLoop && conn.sourceId === conn.targetId) {
                 // Self Loop with Right-side visibility
@@ -1278,6 +1317,8 @@ const Canvas: React.FC<CanvasProps> = ({
                 // Quadratic Bezier?
                 const start = getIntersection(conn.sourceId, targetCenter);
                 const end = getIntersection(conn.targetId, sourceCenter);
+                lineStart = start; lineEnd = end;
+                lineLen = Math.sqrt((end.x-start.x)**2 + (end.y-start.y)**2);
                 const sx = start.x + offsetX;
                 const sy = start.y + offsetY;
                 const ex = end.x + offsetX;
@@ -1319,6 +1360,9 @@ const Canvas: React.FC<CanvasProps> = ({
                 } else {
                   end = getIntersection(conn.targetId, sourceCenter);
                 }
+
+                lineStart = start; lineEnd = end;
+                lineLen = Math.sqrt((end.x-start.x)**2 + (end.y-start.y)**2);
 
                 // Build path with waypoints if they exist
                 pathData = `M ${start.x + offsetX} ${start.y + offsetY}`;
@@ -1394,69 +1438,62 @@ const Canvas: React.FC<CanvasProps> = ({
                   />
                 ))}
 
-                {/* Label */}
+                {/* Label — positioned along the line at labelT, draggable along line only */}
                 {(conn.label || editingConnectionId === conn.id) && (() => {
-                  // Calculate line angle to determine automatic offset
-                  let autoOffsetY = 0;
+                  const t = conn.labelT ?? 0.5;
+                  // Compute the anchor point on the line at t (SVG coords)
+                  const ancX = lineStart.x + (lineEnd.x - lineStart.x) * t + offsetX;
+                  const ancY = lineStart.y + (lineEnd.y - lineStart.y) * t + offsetY;
 
-                  if (!isLoop || conn.sourceId !== conn.targetId) {
-                    // For straight lines and connections between different nodes
-                    // Calculate the angle/slope at the label position
-                    let dx = 0;
-                    let dy = 0;
-
-                    if (conn.waypoints && conn.waypoints.length > 0) {
-                      // Use angle from last waypoint to end
-                      const lastWaypoint = conn.waypoints[conn.waypoints.length - 1];
-                      const end = conn.targetAnchor
-                        ? getAnchorPoint(conn.targetId, conn.targetAnchor)
-                        : getIntersection(conn.targetId, getCenter(conn.sourceId));
-                      dx = end.x - lastWaypoint.x;
-                      dy = end.y - lastWaypoint.y;
-                    } else {
-                      // Use angle from start to end
-                      const start = conn.sourceAnchor
-                        ? getAnchorPoint(conn.sourceId, conn.sourceAnchor)
-                        : getIntersection(conn.sourceId, getCenter(conn.targetId));
-                      const end = conn.targetAnchor
-                        ? getAnchorPoint(conn.targetId, conn.targetAnchor)
-                        : getIntersection(conn.targetId, getCenter(conn.sourceId));
-                      dx = end.x - start.x;
-                      dy = end.y - start.y;
-                    }
-
-                    // If line is mostly horizontal (abs(dy) < abs(dx) * 0.5), offset label above
-                    if (Math.abs(dy) < Math.abs(dx) * 0.5) {
-                      autoOffsetY = -20; // Offset 20px above the line
-                    }
+                  // Perpendicular offset: always push label to the "upward" side
+                  const vx = lineEnd.x - lineStart.x;
+                  const vy = lineEnd.y - lineStart.y;
+                  let perpX = 0, perpY = -22;
+                  if (lineLen > 0) {
+                    perpX = (-vy / lineLen) * 22;
+                    perpY =  (vx / lineLen) * 22;
+                    if (perpY > 0) { perpX = -perpX; perpY = -perpY; }
                   }
+                  const labelX = ancX + perpX;
+                  const labelY = ancY + perpY;
 
-                  // Apply both automatic offset and manual user offset
-                  const labelX = midX + (conn.labelOffset?.x || 0);
-                  const labelY = midY + autoOffsetY + (conn.labelOffset?.y || 0);
+                  // Dynamic label box width based on text length
+                  const halfW = Math.max(40, (conn.label?.length || 0) * 5.5 + 14);
 
                   return (
-                    <g transform={`translate(${labelX}, ${labelY})`}>
+                    <g>
+                      {/* Connector stem from line anchor to label box */}
+                      <line
+                        x1={ancX} y1={ancY} x2={labelX} y2={labelY}
+                        stroke={strokeColor} strokeWidth="1" strokeDasharray="2,2"
+                        className="pointer-events-none"
+                      />
+                      <circle cx={ancX} cy={ancY} r="3" fill={strokeColor} className="pointer-events-none" />
+                      {/* Label box */}
+                      <g transform={`translate(${labelX}, ${labelY})`}>
                         <rect
-                          x="-20" y="-12" width="40" height="24" rx="4"
-                          fill="#ffffff" stroke={strokeColor} strokeWidth="1"
-                          className="cursor-move"
+                          x={-halfW} y="-16" width={halfW * 2} height="32" rx="5"
+                          fill="#ffffff" stroke={strokeColor} strokeWidth="1.5"
+                          className="cursor-ew-resize"
                           onMouseDown={(e) => {
                             e.stopPropagation();
-                            onSnapshot(); // Save state before dragging label
+                            onSnapshot();
                             setDraggingLabel({
                               connectionId: conn.id,
                               startX: e.clientX,
                               startY: e.clientY,
-                              initialOffset: conn.labelOffset || { x: 0, y: 0 }
+                              lineStart,
+                              lineEnd,
+                              lineLen,
+                              currentT: t
                             });
                           }}
                         />
                         {editingConnectionId === conn.id ? (
-                          <foreignObject x="-30" y="-12" width="60" height="24">
+                          <foreignObject x={-halfW} y="-16" width={halfW * 2} height="32">
                             <input
                               autoFocus
-                              className="w-full h-full bg-transparent text-center text-[10px] text-black focus:outline-none"
+                              className="w-full h-full bg-transparent text-center text-[14px] text-black focus:outline-none"
                               defaultValue={conn.label}
                               onBlur={(e) => updateConnectionLabel(conn.id, e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && updateConnectionLabel(conn.id, e.currentTarget.value)}
@@ -1464,12 +1501,13 @@ const Canvas: React.FC<CanvasProps> = ({
                           </foreignObject>
                         ) : (
                           <text
-                            x="0" y="4" textAnchor="middle" fill="#000000" fontSize="10px" fontWeight="500"
+                            x="0" y="5" textAnchor="middle" fill="#000000" fontSize="14px" fontWeight="600"
                             className="pointer-events-none select-none"
                           >
                             {conn.label}
                           </text>
                         )}
+                      </g>
                     </g>
                   );
                 })()}
@@ -1491,7 +1529,14 @@ const Canvas: React.FC<CanvasProps> = ({
         </svg>
 
         {/* Components */}
-        {[...components].sort((a, b) => (a.zOrder || 0) - (b.zOrder || 0)).map((comp) => {
+        {[...components].sort((a, b) => {
+          const typeTier = (t: ComponentType) => {
+            if (t === ComponentType.STRUCTURE_LAYER || t === ComponentType.ANNOTATION_RECT || t === ComponentType.ANNOTATION_CIRCLE) return 0;
+            if (t === ComponentType.ANNOTATION_TEXT || t === ComponentType.ANNOTATION_DRAW) return 2000;
+            return 1000;
+          };
+          return (typeTier(a.type) + (a.zOrder || 0)) - (typeTier(b.type) + (b.zOrder || 0));
+        }).map((comp) => {
           const isSelected = selectedId === comp.id || selectedIds.includes(comp.id);
           const isSource = connectingSourceId === comp.id;
           const dims = getDimensions(comp);
@@ -1663,11 +1708,11 @@ const Canvas: React.FC<CanvasProps> = ({
                 <div className={`mb-1 ${isLayer || isFlowComponent ? 'text-black' : 'text-white'}`} style={{ transform: 'scale(1.125)' }}>
                     {getIconForType(comp.type)}
                   </div>
-                  <div className={`text-xs font-bold text-center truncate w-full px-1 ${isLayer || isFlowComponent ? 'text-black' : 'text-white'}`} title={displayName}>
+                  <div className={`text-sm font-bold text-center truncate w-full px-1 ${isLayer || isFlowComponent ? 'text-black' : 'text-white'}`} title={displayName}>
                     {displayName}
                   </div>
                   {showHierarchy && (
-                    <div className={`text-[9px] text-center w-full px-1 leading-tight ${isLayer || isFlowComponent ? 'text-black/70' : 'text-white/70'}`}>
+                    <div className={`text-[11px] text-center w-full px-1 leading-tight ${isLayer || isFlowComponent ? 'text-black/70' : 'text-white/70'}`}>
                       {hierarchyParts[0]}
                     </div>
                   )}
@@ -1726,13 +1771,15 @@ const Canvas: React.FC<CanvasProps> = ({
                     >
                       <ArrowDown size={12} />
                     </button>
-                    <button
-                      onClick={(e) => handleDelete(comp.id, e)}
-                      className="bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform"
-                      title="Delete"
-                    >
-                      <X size={12} />
-                    </button>
+                    {!isStart && !isEnd && (
+                      <button
+                        onClick={(e) => handleDelete(comp.id, e)}
+                        className="bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-md z-40 transform hover:scale-110 transition-transform"
+                        title="Delete"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
                   </div>
 
                   {/* Connection Anchor Points - Show when in connection mode */}
@@ -1829,6 +1876,21 @@ const Canvas: React.FC<CanvasProps> = ({
                 </>
               )}
 
+              {/* Anchor dots for hovered-but-not-selected component in connection mode */}
+              {(activeTool === 'connect_arrow' || activeTool === 'connect_line' || activeTool === 'connect_loop') && !isSelected && hoveredId === comp.id && !connectingSourceId && !isText && !isDraw && (
+                <>
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Center" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'center')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'center')} />
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Top" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'top')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'top')} />
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Bottom" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'bottom')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'bottom')} />
+                  <div className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Left" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'left')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'left')} />
+                  <div className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Right" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'right')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'right')} />
+                  <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Top-Left" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'top-left')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'top-left')} />
+                  <div className="absolute top-0 right-0 translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Top-Right" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'top-right')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'top-right')} />
+                  <div className="absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Bottom-Left" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'bottom-left')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'bottom-left')} />
+                  <div className="absolute bottom-0 right-0 translate-x-1/2 translate-y-1/2 w-3 h-3 bg-green-500 rounded-full opacity-70 hover:opacity-100 hover:scale-150 transition-all z-50 cursor-pointer" title="Bottom-Right" onMouseDown={(e) => handleAnchorClick(e, comp.id, 'bottom-right')} onMouseUp={(e) => handleMouseUpComponent(e, comp.id, 'bottom-right')} />
+                </>
+              )}
+
               {isDecision ? (
                 <div className={`w-full h-full transform rotate-45 border-2 border-slate-700 flex items-center justify-center ${isSelected ? 'ring-2 ring-blue-500/50' : ''}`} style={{ backgroundColor: 'transparent' }}>
                   <div className="transform -rotate-45 flex flex-col items-center w-full">
@@ -1872,6 +1934,176 @@ const Canvas: React.FC<CanvasProps> = ({
           />
         )}
       </div>
+
+      {/* Minimap */}
+      {(() => {
+        const MM_W = 180;
+        const MM_H = 110;
+
+        if (components.length === 0) return null;
+
+        // Compute world bounding box of all components
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        components.forEach(comp => {
+          const dims = getDimensions(comp);
+          minX = Math.min(minX, comp.x);
+          minY = Math.min(minY, comp.y);
+          maxX = Math.max(maxX, comp.x + dims.w);
+          maxY = Math.max(maxY, comp.y + dims.h);
+        });
+
+        const worldW = Math.max(maxX - minX, 200);
+        const worldH = Math.max(maxY - minY, 200);
+        const pad = 0.15;
+        const paddedMinX = minX - worldW * pad;
+        const paddedMinY = minY - worldH * pad;
+        const paddedW = worldW * (1 + 2 * pad);
+        const paddedH = worldH * (1 + 2 * pad);
+
+        const scale = Math.min(MM_W / paddedW, MM_H / paddedH);
+        const drawW = paddedW * scale;
+        const drawH = paddedH * scale;
+        const originX = (MM_W - drawW) / 2;
+        const originY = (MM_H - drawH) / 2;
+
+        const toMM = (wx: number, wy: number) => ({
+          x: (wx - paddedMinX) * scale + originX,
+          y: (wy - paddedMinY) * scale + originY,
+        });
+
+        const canvasEl = canvasRef.current;
+        const canvasW = canvasEl ? canvasEl.clientWidth : 800;
+        const canvasH = canvasEl ? canvasEl.clientHeight : 600;
+
+        // Viewport rect in world coords
+        const vpWorldLeft = -viewState.x / viewState.zoom;
+        const vpWorldTop  = -viewState.y / viewState.zoom;
+        const vpWorldW    =  canvasW / viewState.zoom;
+        const vpWorldH    =  canvasH / viewState.zoom;
+
+        const vpMM   = toMM(vpWorldLeft, vpWorldTop);
+        const vpMMW  = Math.max(vpWorldW * scale, 8);
+        const vpMMH  = Math.max(vpWorldH * scale, 8);
+
+        const handleMinimapMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+
+          const applyView = (clientX: number, clientY: number) => {
+            const mmX = Math.max(0, Math.min(MM_W, clientX - rect.left));
+            const mmY = Math.max(0, Math.min(MM_H, clientY - rect.top));
+            const worldX = (mmX - originX) / scale + paddedMinX;
+            const worldY = (mmY - originY) / scale + paddedMinY;
+            setViewState(prev => ({
+              ...prev,
+              x: canvasW / 2 - worldX * prev.zoom,
+              y: canvasH / 2 - worldY * prev.zoom,
+            }));
+          };
+
+          applyView(e.clientX, e.clientY);
+          minimapDragging.current = true;
+
+          const onMove = (ev: MouseEvent) => {
+            if (minimapDragging.current) applyView(ev.clientX, ev.clientY);
+          };
+          const onUp = () => {
+            minimapDragging.current = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        };
+
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 72,
+              left: 16,
+              width: MM_W,
+              height: MM_H,
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: 8,
+              overflow: 'hidden',
+              zIndex: 50,
+              cursor: 'crosshair',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
+            }}
+            onMouseDown={handleMinimapMouseDown}
+          >
+            <svg width={MM_W} height={MM_H} style={{ display: 'block', userSelect: 'none' }}>
+              {/* Canvas background */}
+              <rect x={0} y={0} width={MM_W} height={MM_H} fill="#f8fafc" />
+
+              {/* Connections */}
+              {connections.map(conn => {
+                const src = components.find(c => c.id === conn.sourceId);
+                const tgt = components.find(c => c.id === conn.targetId);
+                if (!src || !tgt) return null;
+                const sd = getDimensions(src);
+                const td = getDimensions(tgt);
+                const s = toMM(src.x + sd.w / 2, src.y + sd.h / 2);
+                const t = toMM(tgt.x + td.w / 2, tgt.y + td.h / 2);
+                return (
+                  <line
+                    key={conn.id}
+                    x1={s.x} y1={s.y}
+                    x2={t.x} y2={t.y}
+                    stroke={conn.color || '#94a3b8'}
+                    strokeWidth={0.8}
+                    opacity={0.7}
+                  />
+                );
+              })}
+
+              {/* Components — faithfully shaped */}
+              {components.map(comp => {
+                const dims = getDimensions(comp);
+                const mm = toMM(comp.x, comp.y);
+                const w = Math.max(dims.w * scale, 2);
+                const h = Math.max(dims.h * scale, 2);
+                const cx = mm.x + w / 2;
+                const cy = mm.y + h / 2;
+                const color = comp.color || '#1e3a8a';
+
+                if (comp.type === ComponentType.FLOW_START || comp.type === ComponentType.FLOW_END) {
+                  return <circle key={comp.id} cx={cx} cy={cy} r={Math.max(w / 2, 2)} fill={color} opacity={0.9} />;
+                }
+                if (comp.type === ComponentType.STRUCTURE_LAYER || comp.type === ComponentType.ANNOTATION_RECT) {
+                  return <rect key={comp.id} x={mm.x} y={mm.y} width={w} height={h} fill="none" stroke={color || '#64748b'} strokeWidth={0.8} strokeDasharray="2,1" rx={1} opacity={0.75} />;
+                }
+                if (comp.type === ComponentType.ANNOTATION_CIRCLE) {
+                  return <ellipse key={comp.id} cx={cx} cy={cy} rx={w / 2} ry={h / 2} fill="none" stroke={color || '#64748b'} strokeWidth={0.8} opacity={0.75} />;
+                }
+                if (comp.type === ComponentType.ANNOTATION_DRAW && comp.points && comp.points.length > 1) {
+                  const pts = comp.points.map(p => toMM(comp.x + p.x, comp.y + p.y));
+                  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                  return <path key={comp.id} d={d} fill="none" stroke={color} strokeWidth={0.8} opacity={0.75} />;
+                }
+                return <rect key={comp.id} x={mm.x} y={mm.y} width={w} height={h} rx={0.5} fill={color} opacity={0.9} />;
+              })}
+
+              {/* Viewport indicator */}
+              <rect
+                x={vpMM.x}
+                y={vpMM.y}
+                width={vpMMW}
+                height={vpMMH}
+                fill="rgba(59,130,246,0.08)"
+                stroke="rgba(59,130,246,0.75)"
+                strokeWidth={1}
+                rx={1}
+                style={{ pointerEvents: 'none' }}
+              />
+            </svg>
+          </div>
+        );
+      })()}
+
     </div>
   );
 };

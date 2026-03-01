@@ -1,14 +1,27 @@
 import React from 'react';
 import { EvaluationResult } from '../types';
-import { X, CheckCircle, AlertTriangle, ShieldAlert, Award } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, ShieldAlert, Award, TrendingUp, Wrench } from 'lucide-react';
+
+interface ImprovementStep {
+  title: string;
+  explanation: string;
+  issueAddressed: string;
+}
+
+interface ImprovementResult {
+  improvementOverview: string;
+  steps: ImprovementStep[];
+  expectedScoreImprovement: number;
+}
 
 interface EvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
   result: EvaluationResult | null;
+  improvementResult?: ImprovementResult | null;
 }
 
-const EvaluationModal: React.FC<EvaluationModalProps> = ({ isOpen, onClose, result }) => {
+const EvaluationModal: React.FC<EvaluationModalProps> = ({ isOpen, onClose, result, improvementResult }) => {
   if (!isOpen || !result) return null;
 
   const getScoreColor = (score: number) => {
@@ -112,6 +125,47 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({ isOpen, onClose, resu
               ))}
             </ul>
           </div>
+
+          {/* Improvement Plan (shown when score < 80) */}
+          {improvementResult && (
+            <div className="border-t border-slate-700 pt-6">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp size={16} className="text-amber-400" />
+                <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider">Improvement Plan</h3>
+                <span className="ml-auto text-xs text-slate-500">
+                  Expected score: <span className="text-amber-400 font-semibold">{improvementResult.expectedScoreImprovement}/100</span>
+                </span>
+              </div>
+
+              <div className="p-3 bg-amber-950/20 border border-amber-900/30 rounded-lg mb-4">
+                <p className="text-sm text-slate-300 leading-relaxed">{improvementResult.improvementOverview}</p>
+              </div>
+
+              <div className="flex items-center gap-2 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                <Wrench size={14} className="text-slate-400 shrink-0" />
+                <p className="text-xs text-slate-400">
+                  Apply these improvements yourself on the canvas to level up your design.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {improvementResult.steps.map((step, idx) => (
+                  <div key={idx} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <div className="flex items-start gap-2 mb-1">
+                      <span className="w-5 h-5 rounded-full bg-amber-600/30 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        {idx + 1}
+                      </span>
+                      <span className="text-sm font-semibold text-white">{step.title}</span>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed ml-7">{step.explanation}</p>
+                    {step.issueAddressed && (
+                      <p className="text-xs text-amber-500/70 ml-7 mt-1 italic">Addresses: {step.issueAddressed}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
         
